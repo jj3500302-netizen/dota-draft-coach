@@ -40,7 +40,14 @@
                                 "!data/bench-*.json",
                                 "!.claude{,/**}",
                                 "!*.rar",
-                                "!*.zip"
+                                "!*.zip",
+                                "!data/me.json",
+                                "!data/players.json",
+                                "!data/reports{,/**}",
+                                "!data/od-cache{,/**}",
+                                "!data/latest-report.json",
+                                "!data/parse-requested.json",
+                                "!data/collect-state.json"
                             ],
                   "win":  {
                               "target":  [

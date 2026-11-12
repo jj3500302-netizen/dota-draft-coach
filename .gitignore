@@ -9,3 +9,9 @@ samples/
 .claude/
 # caches
 data/bench-*.json
+data/me.json
+data/players.json
+data/reports/
+data/od-cache/
+data/latest-report.json
+data/parse-requested.json

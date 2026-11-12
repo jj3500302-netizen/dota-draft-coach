@@ -14,6 +14,7 @@ const { readDraft, loadRefs } = require("./matcher");
 const advisor = require("./advisor");
 const { counterItems } = require("./items");
 const timings = require("./assets/timings.json");
+const insights = require("./insights");
 
 const PORT = +process.env.DRAFTCOACH_PORT || 3007;   // Dota's GSI config posts to 3007; another port is only for testing
 const TOKEN = "draftcoach-local";
@@ -47,8 +48,9 @@ function payload() {
     const R = ids(current.radiant), D = ids(current.dire);
     advice = { radiant: {}, dire: {} };
     for (let pos = 0; pos <= 5; pos++) {
-      advice.radiant[pos] = advisor.advise({ allies: R, enemies: D, pos });
-      advice.dire[pos] = advisor.advise({ allies: D, enemies: R, pos });
+      const pool = insights.getPool();
+      advice.radiant[pos] = advisor.advise({ allies: R, enemies: D, pos, pool });
+      advice.dire[pos] = advisor.advise({ allies: D, enemies: R, pos, pool });
     }
     adviceCache = advice;
   }
@@ -56,15 +58,18 @@ function payload() {
   if (game && GAME_STATES.has(gsi.state)) {
     const foe = gsi.team === "radiant" ? "dire" : gsi.team === "dire" ? "radiant" : null;
     const enemies = current && foe ? current[foe].filter((s) => s.state === "picked").map((s) => ({ key: s.key, name: s.hero })) : [];
-    live = { ...game, history, bench, enemiesKnown: enemies.length, items: counterItems(enemies, game.owned) };
+    live = { ...game, history, bench, mine: insights.baselineAt(game.heroId, game.clock), enemiesKnown: enemies.length, items: counterItems(enemies, game.owned) };
   }
-  return JSON.stringify({ gsi, draft: current, roles, advice, game: live, timings, manual, capturing: ALWAYS || !!FILE || DRAFT_STATES.has(gsi.state) });
+  return JSON.stringify({ gsi, draft: current, roles, advice, game: live, timings, manual, me: insights.state(), capturing: ALWAYS || !!FILE || DRAFT_STATES.has(gsi.state) });
 }
 
 function broadcast() {
   const msg = `data: ${payload()}\n\n`;
   for (const res of clients) res.write(msg);
 }
+
+// new hero pool / baseline / report from OpenDota: re-send to the page
+insights.onChange((what) => { if (what === "pool") adviceCache = null; broadcast(); });
 
 function logDraft(d) {
   const fmt = (t) => t.map((s) => (s.state === "picked" ? s.hero : "·")).join(", ");
@@ -100,6 +105,7 @@ function readGame(data) {
   };
   const t = Math.floor(game.clock / 30) * 30;
   if (game.clock > 0 && (!history.length || history[history.length - 1].t < t)) history.push({ t, gpm: game.gpm, xpm: game.xpm, lh: game.lh });
+  if (game.heroId) insights.baseline(game.heroId);
   if (game.heroId && (!bench || bench.heroId !== game.heroId)) {
     bench = { heroId: game.heroId };   // placeholder so we only ask once
     loadBench(game.heroId).then((b) => { bench = b; broadcast(); }).catch((e) => console.error("benchmarks:", e.message));
@@ -152,6 +158,10 @@ const server = http.createServer((req, res) => {
         if (state !== gsi.state) console.log(`GSI: ${state ?? "menu"}`);
         const changed = state !== gsi.state || team !== gsi.team || teamSlot !== gsi.teamSlot || matchid !== gsi.matchid;
         gsi = { state, team, teamSlot, matchid };
+        if (data.player && data.player.accountid) insights.setMe(data.player.accountid);
+        // match over: build the report once OpenDota has it
+        const ended = state === "DOTA_GAMERULES_STATE_POST_GAME" || (!state && GAME_STATES.has(gsi.state));
+        if (ended && (matchid || gsi.matchid)) insights.queueReport(matchid || gsi.matchid);
         const live = GAME_STATES.has(state);
         if (live) readGame(data); else if (!state) game = null;
         // in a match, push the live numbers at most once a second
@@ -160,6 +170,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  if (req.url.startsWith("/api/")) return api(req, res);
   if (req.url === "/events") {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     clients.add(res);
@@ -178,6 +189,19 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   fs.createReadStream(path.join(__dirname, "public", req.url === "/hud" ? "hud.html" : "index.html")).pipe(res);
 });
+
+// data for the report and players pages
+async function api(req, res) {
+  const send = (code, v) => { res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify(v)); };
+  const u = new URL(req.url, "http://x"), parts = u.pathname.split("/").filter(Boolean);
+  try {
+    if (parts[1] === "matches") return send(200, await insights.myMatches());
+    if (parts[1] === "report" && /^\d+$/.test(parts[2] || "")) return send(200, await insights.report(parts[2]));
+    if (parts[1] === "players") return send(200, insights.metList());
+    if (parts[1] === "player" && /^\d+$/.test(parts[2] || "")) return send(200, await insights.player(parts[2]));
+    send(404, { error: "not found" });
+  } catch (e) { send(500, { error: e.message }); }
+}
 
 const ready = new Promise((resolve) => {
   server.on("error", (e) => {

@@ -8,6 +8,7 @@ A small desktop app that reads the draft from your screen and suggests heroes, t
 
 - **Draft:** reads both teams' picks from the top of the screen, reads your position from the ranked role labels, and suggests heroes to pick or avoid with the reason (counters an enemy, fits a teammate, team is missing something). Click a hero to copy its name.
 - **In game:** a small see-through strip with GPM, XPM, last hits, denies and KDA, plus pop-ups before runes, lotus, Shrine of Wisdom, Tormentor and day/night changes. The ☰ button opens counter-item suggestions and the Roshan / Tormentor timers.
+- **Personal:** the app picks up your account from Dota and uses your OpenDota history: your own record on each suggested hero, ▲/▼ against your usual GPM/XPM in game, an after-match report (your numbers vs your usual and vs other players on the hero, lane, item timings, deaths), and a Players tab with everyone you've met, their playstyle and 30-day hero pool. Needs **Expose Public Match Data** on in Dota (Options > Social).
 - Thai and English.
 
 ## Using it

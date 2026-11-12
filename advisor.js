@@ -75,7 +75,8 @@ const stats = () => S || build();
 
 // allies/enemies/unavailable: arrays of hero ids
 // pos: 1-5 = the position we will play (only heroes played there are suggested); 0/undefined = any
-function advise({ allies = [], enemies = [], unavailable = [], pos = 0 }, top = 8) {
+// pool: your own games per hero {heroId: {games, win}} (null = unknown, no personal weighting)
+function advise({ allies = [], enemies = [], unavailable = [], pos = 0, pool = null }, top = 8) {
   const s = stats();
   const taken = new Set([...allies, ...enemies, ...unavailable]);
   const roleCount = {};
@@ -95,7 +96,11 @@ function advise({ allies = [], enemies = [], unavailable = [], pos = 0 }, top = 
     const base = s.wr[h.id] - 0.5;
     const roleBonus = missing.filter((r) => h.roles.includes(r));
     const tooManyCores = !pos && cores >= 2 && isCore(h);
-    const score = counters.reduce((t, c) => t + c.v, 0) + synergies.reduce((t, c) => t + c.v, 0) + base * 0.5 +
+    // your own record on the hero: a comfort pick gets a little extra, an unplayed hero a little less
+    const mine = pool ? pool[h.id] || { games: 0, win: 0 } : null;
+    const personal = !mine ? 0 : ((mine.win + 5) / (mine.games + 10) - 0.5) * 0.15 +
+      (mine.games >= 20 ? 0.015 : mine.games >= 5 ? 0.008 : mine.games >= 1 ? -0.01 : -0.03);
+    const score = personal + counters.reduce((t, c) => t + c.v, 0) + synergies.reduce((t, c) => t + c.v, 0) + base * 0.5 +
       roleBonus.length * 0.004 - (tooManyCores ? 0.012 : 0);
     const reasons = [];
     for (const c of [...counters].sort((x, y) => y.v - x.v)) if (c.v >= 0.01) reasons.push({ t: "counter", hero: byId.get(c.id).name, v: c.v });
@@ -103,10 +108,11 @@ function advise({ allies = [], enemies = [], unavailable = [], pos = 0 }, top = 
     for (const r of roleBonus) reasons.push({ t: "need", role: r });
     const warnings = counters.filter((c) => c.v <= -0.015).sort((x, y) => x.v - y.v).map((c) => ({ t: "weak", hero: byId.get(c.id).name, v: c.v }));
     if (tooManyCores) warnings.push({ t: "cores", n: cores });
-    rows.push({ posShare: share, id: h.id, key: h.key, name: h.name, score, winrate: s.wr[h.id], games: s.games[h.id], reasons: reasons.slice(0, 3), warnings: warnings.slice(0, 2) });
+    if (mine && mine.games < 5) warnings.push({ t: mine.games ? "few" : "never", n: mine.games });
+    rows.push({ posShare: share, id: h.id, key: h.key, name: h.name, score, winrate: s.wr[h.id], games: s.games[h.id], me: mine, reasons: reasons.slice(0, 3), warnings: warnings.slice(0, 2) });
   }
   rows.sort((a, b) => b.score - a.score);
-  const avoid = rows.filter((r) => r.warnings.length).slice(-top).reverse();
+  const avoid = rows.filter((r) => r.warnings.some((w) => w.t === "weak" || w.t === "cores")).slice(-top).reverse();
 
   // rough draft balance from all cross-team pairs
   let edge = 0;

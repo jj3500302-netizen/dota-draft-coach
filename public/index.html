@@ -78,6 +78,7 @@
   .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
   .chip { font-size:11.5px; padding:1px 7px; border-radius:5px; white-space:nowrap; }
   .chip.c { background:#58c26a1f; color:var(--good); } .chip.s { background:#c48bb01f; color:var(--syn); }
+  .chip.m { background:#f4eaec12; color:var(--text); border:1px solid var(--line); }
   .chip.n { background:#d5645f1f; color:var(--accent); } .chip.w { background:#e6a15c1f; color:var(--bad); }
   .score { text-align:right; font-variant-numeric:tabular-nums; font-weight:800; font-size:15px; min-width:44px; }
   .score.pos { color:var(--good); } .score.neg { color:var(--bad); }
@@ -186,6 +187,7 @@
   <div><span data-i="alertsFor"></span><div class="mutes" id="mutes"></div></div>
 </div>
 <div class="toast" id="toast" hidden></div>
+<nav class="nav" id="nav"><button data-v="draft" class="on"></button><button data-v="report"></button><button data-v="players"></button></nav>
 <main>
  <div class="view" id="gameview" hidden>
   <div class="alert" id="alert" hidden></div>
@@ -236,8 +238,11 @@
   </div>
   <div class="foot" id="foot"></div>
  </div>
+ <div class="view" id="reportview" hidden></div>
+ <div class="view" id="playersview" hidden></div>
 </main>
 <script>
+let view = "draft";
 const T = {
   th: {
     pin: "📌 ปักไว้บนสุด", opacity: "ความโปร่งใส", copyTip: "คลิกเพื่อคัดลอกชื่อฮีโร่",
@@ -267,6 +272,7 @@ const T = {
     trait: { evasion: h => `${h} หลบการตี`, passive: h => `ปิด passive ของ ${h}`, heal: h => `ลดฮีล/regen ของ ${h}`, invis: h => `${h} ล่องหน`,
       swarm: h => `เคลียร์ร่างแยก/ลูกสมุนของ ${h}`, magic: h => `กันดาเมจเวทจาก ${h}`, target: h => `กันสกิลล็อกเป้าของ ${h}`, silence: h => `แก้ silence ของ ${h}`,
       physical: h => `กันตีธรรมดาจาก ${h}`, slippery: h => `จับ ${h} ที่หนีเก่ง`, mana: h => `เผามานา ${h}`, buffs: h => `ล้างบัฟของ ${h}`, jump: h => `หนีตอน ${h} กระโดดใส่` },
+    mine: (g, w) => `คุณ: ${g} เกม · ชนะ ${w}%`, never: "คุณยังไม่เคยเล่นตัวนี้", few: n => `คุณเล่นตัวนี้แค่ ${n} เกม`, usual: v => `คุณปกติ ${v}`,
     noEnemy: "เกมนี้แอปไม่ได้อ่านดราฟ เลยไม่รู้ว่าฝั่งตรงข้ามเป็นตัวอะไร", noItems: "ไม่มีไอเทมแก้ทางที่ชัดเจนเพิ่มแล้ว",
     needRestart: "ยังมองไม่เห็นไอเทมที่คุณมี — ปิดแล้วเปิด Dota ใหม่หนึ่งครั้ง",
   },
@@ -298,6 +304,7 @@ const T = {
     trait: { evasion: h => `${h} has evasion`, passive: h => `Breaks ${h}'s passive`, heal: h => `Cuts ${h}'s healing`, invis: h => `${h} goes invisible`,
       swarm: h => `Clears ${h}'s illusions/summons`, magic: h => `Blocks magic damage from ${h}`, target: h => `Blocks ${h}'s targeted spell`, silence: h => `Removes ${h}'s silence`,
       physical: h => `Stops right-clicks from ${h}`, slippery: h => `Pins down ${h}`, mana: h => `Burns ${h}'s mana`, buffs: h => `Strips ${h}'s buffs`, jump: h => `Escape when ${h} jumps you` },
+    mine: (g, w) => `You: ${g} games · ${w}% won`, never: "You have never played this hero", few: n => `You have only ${n} games on it`, usual: v => `you usually ${v}`,
     noEnemy: "The draft was not read this game, so the enemy heroes are unknown", noItems: "No more clear counter items",
     needRestart: "Can't see your items yet — restart Dota once",
   },
@@ -315,12 +322,13 @@ const pct = x => (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%";
 function chip(r) {
   const t = T[lang];
   const [cls, text] = r.t === "counter" ? ["c", t.counter(r.hero, pct(r.v))] : r.t === "synergy" ? ["s", t.synergy(r.hero, pct(r.v))]
-    : r.t === "need" ? ["n", t.need(t.role[r.role] || r.role)] : r.t === "weak" ? ["w", t.weak(r.hero, pct(r.v))] : ["w", t.cores(r.n)];
+    : r.t === "need" ? ["n", t.need(t.role[r.role] || r.role)] : r.t === "weak" ? ["w", t.weak(r.hero, pct(r.v))] : r.t === "me" ? ["m", t.mine(r.g, r.w)] : r.t === "never" ? ["w", t.never] : r.t === "few" ? ["w", t.few(r.n)] : ["w", t.cores(r.n)];
   return `<span class="chip ${cls}">${esc(text)}</span>`;
 }
 function card(h, i, bad) {
   const t = T[lang];
-  const chips = bad ? h.warnings.map(chip).concat(h.reasons.slice(0, 1).map(chip)) : h.reasons.map(chip).concat(h.warnings.map(chip));
+  const mineChip = h.me && h.me.games >= 5 ? [chip({ t: "me", g: h.me.games, w: Math.round(h.me.win / h.me.games * 100) })] : [];
+  const chips = bad ? h.warnings.map(chip).concat(h.reasons.slice(0, 1).map(chip)) : mineChip.concat(h.reasons.map(chip), h.warnings.map(chip));
   const share = h.posShare != null ? t.share(Math.round(h.posShare * 100)) : "";
   return `<div class="card ${!bad && i === 0 ? "top" : ""}" data-name="${esc(h.name)}" title="${esc(t.copyTip)}">
     <div class="pic"><img src="/heroes/${h.key}.png" alt=""><span class="rank">${i + 1}</span></div>
@@ -345,8 +353,9 @@ function render() {
 
   curPos = pos;
   const inGame = !!last.game;
-  document.getElementById("gameview").hidden = !inGame;
-  document.getElementById("draftview").hidden = inGame;
+  if (typeof onMeState === "function") onMeState(last.me);
+  document.getElementById("gameview").hidden = !inGame || view !== "draft";
+  document.getElementById("draftview").hidden = inGame || view !== "draft";
   document.getElementById("sound").textContent = soundOn ? t.soundOn : t.soundOff;
   document.getElementById("mutes").innerHTML = MUTABLE.map(id => `<button data-id="${id}" class="${muted.has(id) ? "" : "on"}">${esc(t.obj[id])}</button>`).join("");
   const st = document.getElementById("status");
@@ -425,8 +434,8 @@ function renderGame() {
     const p = pctl(table, v); return `<small class="${p >= 50 ? "up" : "down"}">${esc(t.topP(p))}</small>`;
   };
   document.getElementById("tiles").innerHTML =
-    `<div class="tile"><u>GPM</u><b>${g.gpm}</b>${sub(b.gpm, g.gpm)}</div>` +
-    `<div class="tile"><u>XPM</u><b>${g.xpm}</b>${sub(b.xpm, g.xpm)}</div>` +
+    `<div class="tile"><u>GPM</u><b>${g.gpm}</b>${g.mine ? `<small class="${g.gpm >= g.mine.gpm ? "up" : "down"}">${esc(t.usual(g.mine.gpm))}</small>` : sub(b.gpm, g.gpm)}</div>` +
+    `<div class="tile"><u>XPM</u><b>${g.xpm}</b>${g.mine ? `<small class="${g.xpm >= g.mine.xpm ? "up" : "down"}">${esc(t.usual(g.mine.xpm))}</small>` : sub(b.xpm, g.xpm)}</div>` +
     `<div class="tile"><u>LH / DN</u><b>${g.lh} / ${g.dn}</b><small>${(g.lh / mins).toFixed(1)} ${esc(t.perMin)}</small></div>` +
     `<div class="tile"><u>K / D / A</u><b>${g.k}/${g.d}/${g.a}</b><small>${esc(g.netWorth != null ? t.nw : t.gold)} ${(g.netWorth != null ? g.netWorth : g.gold).toLocaleString()}</small></div>`;
   document.getElementById("benchnote").textContent = medianOf(b.gpm) != null ? t.benchNote : "";
@@ -569,5 +578,238 @@ es.onopen = () => { connected = true; render(); };
 es.onmessage = e => { connected = true; last = JSON.parse(e.data); render(); };
 es.onerror = () => { connected = false; render(); };
 </script>
+<style>
+  .nav { flex:none; display:flex; gap:2px; padding:4px 8px 0; border-bottom:1px solid var(--line); }
+  .nav button { background:none; border:0; border-bottom:2px solid transparent; padding:5px 10px; color:var(--muted); font-weight:600; font-size:12.5px; position:relative; }
+  .nav button.on { color:var(--text); border-bottom-color:var(--accent); }
+  .nav button.dot::after { content:""; position:absolute; top:4px; right:3px; width:6px; height:6px; border-radius:50%; background:var(--accent); }
+  body.compact .nav { padding:2px 4px 0; } body.compact .nav button { padding:3px 6px; font-size:11px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .row2 { display:flex; align-items:center; gap:10px; }
+  .row2 img.hp { width:96px; aspect-ratio:16/9; object-fit:cover; border-radius:6px; }
+  .res { font-weight:800; font-size:16px; } .res.win { color:var(--good); } .res.loss { color:var(--dire); }
+  .sel { width:100%; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:6px; font:inherit; }
+  .status { font-size:12px; color:var(--accent); background:#d5645f14; border:1px dashed #d5645f66; border-radius:8px; padding:7px 9px; }
+  table.st { width:100%; border-collapse:collapse; font-size:12.5px; font-variant-numeric:tabular-nums; }
+  table.st th { text-align:right; color:var(--muted); font-weight:400; font-size:10.5px; padding:2px 4px; }
+  table.st th:first-child, table.st td:first-child { text-align:left; }
+  table.st td { text-align:right; padding:4px; border-top:1px solid var(--line); }
+  td .up { color:var(--good); } td .down { color:var(--bad); }
+  .pbar { height:5px; border-radius:3px; background:var(--panel2); overflow:hidden; min-width:44px; } .pbar i { display:block; height:100%; background:var(--accent); }
+  .notes { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; }
+  .notes li.good::marker { color:var(--good); } .notes li.bad::marker { color:var(--bad); }
+  .its { display:flex; flex-wrap:wrap; gap:6px; }
+  .it { display:flex; flex-direction:column; align-items:center; width:58px; font-size:10.5px; color:var(--muted); text-align:center; }
+  .it img { width:44px; height:32px; object-fit:cover; border-radius:4px; }
+  .it b { color:var(--text); font-size:11.5px; } .it .late { color:var(--bad); } .it .early { color:var(--good); }
+  .pl { display:grid; grid-template-columns:auto 1fr auto; gap:2px 8px; align-items:center; padding:5px 6px; border-radius:8px; }
+  .pl[data-acc] { cursor:pointer; } .pl[data-acc]:hover { background:var(--panel2); }
+  .pl img { width:42px; aspect-ratio:16/9; object-fit:cover; border-radius:4px; }
+  .pl .nm { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pl small { color:var(--muted); font-size:11px; } .pl .met { font-size:11px; color:var(--accent); text-align:right; }
+  .grp { font-size:10.5px; font-weight:700; letter-spacing:.06em; color:var(--muted); margin-top:4px; }
+  .tags { display:flex; flex-wrap:wrap; gap:4px; }
+  .pool { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .pool div { font-size:10.5px; color:var(--muted); } .pool img { width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:4px; display:block; } .pool b { color:var(--text); }
+  .kv { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .kv div { background:var(--panel2); border-radius:8px; padding:6px 8px; } .kv u { text-decoration:none; display:block; font-size:10.5px; color:var(--muted); } .kv b { font-size:15px; }
+  .search { width:100%; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:6px 8px; font:inherit; }
+  .back { background:none; border:0; color:var(--muted); padding:0; font-size:12px; align-self:flex-start; } .back:hover { color:var(--text); }
+  #gadv { width:100%; height:60px; display:block; }
+</style>
+<script>
+const R = {
+  th: {
+    tabs: { draft: "ดราฟ / ในเกม", report: "รายงานหลังเกม", players: "ผู้เล่น" },
+    noAcc: "ยังไม่รู้ว่าคุณคือใคร — เปิด Dota ไว้ตอนเปิดแอปหนึ่งครั้ง แอปจะรู้ Steam ID ของคุณเอง",
+    pick: "เลือกเกม", win: "ชนะ", loss: "แพ้", ago: s => s < 3600 ? `${Math.round(s / 60)} นาทีที่แล้ว` : s < 86400 ? `${Math.round(s / 3600)} ชม.ที่แล้ว` : `${Math.round(s / 86400)} วันที่แล้ว`,
+    loading: "กำลังโหลด…", err: "โหลดไม่ได้ — ลองใหม่อีกครั้ง",
+    st: { waiting: "OpenDota ยังไม่ได้รับข้อมูลเกมนี้ — ปกติใช้เวลา 2–5 นาทีหลังจบเกม แอปจะลองใหม่ให้เอง", basic: "รายงานพื้นฐานพร้อมแล้ว · กำลังรอ OpenDota วิเคราะห์ replay สำหรับรายละเอียด (ไทม์มิ่งไอเทม เลน การตาย)",
+      "basic-only": "OpenDota ยังวิเคราะห์ replay ไม่เสร็จ เลยมีแค่รายงานพื้นฐาน", missing: "OpenDota ไม่มีข้อมูลเกมนี้ — เช็คว่าเปิด Expose Public Match Data ใน Dota แล้ว", notyours: "เกมนี้ไม่มีบัญชีของคุณ", noaccount: "ยังไม่รู้บัญชีของคุณ" },
+    cols: ["", "เกมนี้", "คุณปกติ", "เทียบคนอื่น"], beat: p => `ดีกว่า ${p}%`,
+    stat: { gpm: "GPM", xpm: "XPM", lh: "Last hits", heroDmg: "ดาเมจใส่ฮีโร่/นาที", towerDmg: "ดาเมจป้อม", deaths: "ตาย" },
+    baseN: n => n ? `"คุณปกติ" = ค่าเฉลี่ย ${n} เกมล่าสุดของคุณกับฮีโร่นี้` : "", notesT: "สรุป", itemsT: "ไทม์มิ่งไอเทม", usual: v => `ปกติ ${v}`, goldT: "ทองทีมเรานำ/ตาม", deathsT: "ตายตอน",
+    playersT: "ผู้เล่นในเกมนี้", ally: "ทีมเดียวกัน", enemy: "ฝั่งตรงข้าม", priv: "ซ่อนโปรไฟล์", party: "ปาร์ตี้", metN: (w, a) => [w ? `ด้วยกัน ${w}` : "", a ? `เจอกัน ${a}` : ""].filter(Boolean).join(" · ") || "เพิ่งเจอครั้งแรก",
+    note: {
+      gpmUp: n => `GPM สูงกว่าปกติของคุณ ${n.v} (เทียบ ${n.n} เกมล่าสุด)`, gpmDown: n => `GPM ต่ำกว่าปกติของคุณ ${n.v} (เทียบ ${n.n} เกมล่าสุด)`,
+      topFarm: n => `ฟาร์มดีกว่า ${n.v}% ของคนเล่นตัวนี้`, lowFarm: n => `ฟาร์มดีกว่าแค่ ${n.v}% ของคนเล่นตัวนี้`,
+      moreDeaths: n => `ตาย ${n.v} ครั้ง ปกติคุณตายราว ${n.mine}`, laneWon: n => `ชนะเลน: ทองนาที 10 มากกว่า ${n.opp} ${n.v}`, laneLost: n => `แพ้เลน: ทองนาที 10 น้อยกว่า ${n.opp} ${n.v}`,
+      laneEven: n => `เลนสูสีกับ ${n.opp}`, lhUp: n => `Last hit นาที 10 ได้ ${n.v} (ปกติ ${n.mine})`, lhDown: n => `Last hit นาที 10 ได้ ${n.v} ปกติคุณได้ ${n.mine}`,
+      earlyDeaths: n => `ตายก่อนนาที 10 ไป ${n.v} ครั้ง`, killedBy: n => `${n.hero} ฆ่าคุณ ${n.v} ครั้ง`,
+      itemLate: n => `${n.item} ช้ากว่าปกติ (${mm(n.time)} ปกติ ${mm(n.usual)})`, itemEarly: n => `${n.item} เร็วกว่าปกติ (${mm(n.time)} ปกติ ${mm(n.usual)})` },
+    search: "ค้นหาชื่อผู้เล่น", metList: "ผู้เล่นที่เคยเจอ", noMet: "ยังไม่มี — จะเริ่มเก็บหลังเกมแรกที่มีรายงาน", backT: "← กลับ",
+    rank: "แรงก์", recent: n => `${n} เกมล่าสุด`, wr: "ชนะ", kda: "K/D/A เฉลี่ย", gpmAvg: "GPM เฉลี่ย", pool30: n => `ฮีโร่ 30 วันล่าสุด (${n} เกม)`, styleT: "สไตล์การเล่น",
+    you: "กับคุณ", withT: (n, w) => `เล่นด้วยกัน ${n} เกม · ชนะ ${w}`, vsT: (n, w) => `เจอกันฝั่งตรงข้าม ${n} เกม · คุณชนะ ${w}`, never: "ยังไม่เคยเจอกัน", privT: "ผู้เล่นนี้ซ่อนข้อมูลการเล่น",
+    role: { carry: "เล่นแครี่ (เลนปลอดภัย)", mid: "เล่นกลาง", offlane: "เล่นออฟเลน", jungle: "ฟาร์มป่า", support: "ซัพพอร์ต", roamer: "ซัพพอร์ตเดินแกงค์", core: "ตัวหลัก" },
+    tag: { aggressive: "ชอบบวก", diesALot: "ตายบ่อย", careful: "เล่นระวัง ตายน้อย", teamfighter: "เข้าไฟต์เยอะ", farmer: "ฟาร์มหนัก", oneTrick: "เล่นตัวเดิมซ้ำ", widePool: "เล่นหลายตัว", party: "เล่นเป็นปาร์ตี้บ่อย" },
+    streak: "5 เกมล่าสุด", mainHero: (h, n) => `เล่น ${h} ${n} จาก 20 เกม`,
+  },
+  en: {
+    tabs: { draft: "Draft / game", report: "Match report", players: "Players" },
+    noAcc: "The app doesn't know your account yet — have Dota running once while the app is open and it picks up your Steam ID.",
+    pick: "Pick a match", win: "Win", loss: "Loss", ago: s => s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`,
+    loading: "Loading…", err: "Couldn't load — try again",
+    st: { waiting: "OpenDota doesn't have this match yet — it usually takes 2–5 minutes after the game. The app keeps trying.", basic: "Basic report ready · waiting for OpenDota to parse the replay for the details (item timings, lane, deaths)",
+      "basic-only": "OpenDota hasn't finished parsing the replay, so only the basic report is available", missing: "OpenDota has no data for this match — check that Expose Public Match Data is on in Dota", notyours: "You are not in this match", noaccount: "Your account isn't known yet" },
+    cols: ["", "This game", "You usually", "vs others"], beat: p => `beats ${p}%`,
+    stat: { gpm: "GPM", xpm: "XPM", lh: "Last hits", heroDmg: "Hero damage/min", towerDmg: "Tower damage", deaths: "Deaths" },
+    baseN: n => n ? `"You usually" = your average over your last ${n} games on this hero` : "", notesT: "Summary", itemsT: "Item timings", usual: v => `usually ${v}`, goldT: "Team gold lead", deathsT: "Deaths at",
+    playersT: "Players in this match", ally: "Your team", enemy: "Enemy team", priv: "Private profile", party: "party", metN: (w, a) => [w ? `with ${w}` : "", a ? `against ${a}` : ""].filter(Boolean).join(" · ") || "first time",
+    note: {
+      gpmUp: n => `GPM ${n.v} above your usual (last ${n.n} games)`, gpmDown: n => `GPM ${n.v} below your usual (last ${n.n} games)`,
+      topFarm: n => `Farmed better than ${n.v}% of players on this hero`, lowFarm: n => `Farmed better than only ${n.v}% of players on this hero`,
+      moreDeaths: n => `Died ${n.v} times, you usually die about ${n.mine}`, laneWon: n => `Won the lane: ${n.v} more gold than ${n.opp} at 10:00`, laneLost: n => `Lost the lane: ${n.v} less gold than ${n.opp} at 10:00`,
+      laneEven: n => `Even lane against ${n.opp}`, lhUp: n => `${n.v} last hits at 10:00 (usually ${n.mine})`, lhDown: n => `${n.v} last hits at 10:00, you usually get ${n.mine}`,
+      earlyDeaths: n => `Died ${n.v} times before 10:00`, killedBy: n => `${n.hero} killed you ${n.v} times`,
+      itemLate: n => `${n.item} later than usual (${mm(n.time)}, usually ${mm(n.usual)})`, itemEarly: n => `${n.item} earlier than usual (${mm(n.time)}, usually ${mm(n.usual)})` },
+    search: "Search a player", metList: "Players you've met", noMet: "None yet — fills up after your first reported match", backT: "← Back",
+    rank: "Rank", recent: n => `last ${n} games`, wr: "Won", kda: "Avg K/D/A", gpmAvg: "Avg GPM", pool30: n => `Heroes, last 30 days (${n} games)`, styleT: "Playstyle",
+    you: "With you", withT: (n, w) => `Same team ${n} games · won ${w}`, vsT: (n, w) => `Against you ${n} games · you won ${w}`, never: "You haven't played with them before", privT: "This player hides their match data",
+    role: { carry: "plays carry (safe lane)", mid: "plays mid", offlane: "plays offlane", jungle: "jungles", support: "support", roamer: "roaming support", core: "core" },
+    tag: { aggressive: "aggressive", diesALot: "dies a lot", careful: "careful, rarely dies", teamfighter: "joins every fight", farmer: "heavy farmer", oneTrick: "one-trick", widePool: "plays many heroes", party: "often in a party" },
+    streak: "Last 5", mainHero: (h, n) => `${h} in ${n} of 20 games`,
+  },
+};
+const mm = s => (s < 0 ? "-" : "") + Math.floor(Math.abs(s) / 60) + ":" + String(Math.abs(Math.round(s)) % 60).padStart(2, "0");
+const RANKS = ["", "Herald", "Guardian", "Crusader", "Archon", "Legend", "Ancient", "Divine", "Immortal"];
+const rankName = r => r ? RANKS[Math.floor(r / 10)] + (r % 10 && r < 80 ? " " + (r % 10) : "") : "–";
+const ITEM_IMG = k => `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/${k}.png`;
+const api = p => fetch("/api/" + p).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+let reportId = null, reportData = null, matchesList = null, playerId = null, playerData = null, metData = null, playerQuery = "";
+let lastLatest = null, newReport = false, meState = {};
+
+function setView(v) {
+  view = v;
+  if (v === "report") { newReport = false; loadReport(); }
+  if (v === "players") loadPlayers();
+  render(); renderExtra();
+}
+document.getElementById("nav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setView(b.dataset.v); });
+
+// called by render() with the server's account/report state
+function onMeState(s) {
+  meState = s || {};
+  const l = meState.latest;
+  if (l && l.matchId !== lastLatest) {
+    const first = lastLatest === null;
+    lastLatest = l.matchId;
+    // a match that just ended: open its report (not while still in a game)
+    if (!first || Date.now() - l.at < 10 * 60e3) { reportId = l.matchId; newReport = true; if (!first && !last.game) { view = "report"; newReport = false; loadReport(); } }
+  }
+  const job = reportId && meState.jobs && meState.jobs[reportId];
+  if (view === "report" && job && reportData && !reportData.loading && reportData.status !== job && job !== "waiting") loadReport();
+  renderExtra();
+}
+
+async function loadReport() {
+  if (!meState.accountId) return renderExtra();
+  if (!matchesList) api("matches").then(m => { matchesList = m; if (!reportId && m[0]) { reportId = m[0].matchId; loadReport(); } renderExtra(); }).catch(() => {});
+  if (!metData) loadPlayers();
+  if (!reportId) return renderExtra();
+  const id = reportId;
+  if (!reportData || reportData.matchId !== id) { reportData = { matchId: id, loading: true }; renderExtra(); }
+  try { const r = await api("report/" + id); if (reportId === id) { reportData = r; renderExtra(); } }
+  catch { if (reportId === id) { reportData = { matchId: id, error: true }; renderExtra(); } }
+}
+function loadPlayers() { api("players").then(m => { metData = m; renderExtra(); }).catch(() => {}); }
+async function openPlayer(id) {
+  playerId = id; playerData = { loading: true };
+  if (view !== "players") { view = "players"; render(); }
+  renderExtra();
+  try { const p = await api("player/" + id); if (playerId === id) { playerData = p; renderExtra(); } }
+  catch { if (playerId === id) { playerData = { error: true }; renderExtra(); } }
+}
+
+let extraHtml = { report: "", players: "" };
+function renderExtra() {
+  const r = R[lang];
+  document.querySelectorAll("#nav button").forEach(b => { b.textContent = r.tabs[b.dataset.v]; b.classList.toggle("on", b.dataset.v === view); b.classList.toggle("dot", b.dataset.v === "report" && newReport && view !== "report"); });
+  const rv = document.getElementById("reportview"), pv = document.getElementById("playersview");
+  rv.hidden = view !== "report"; pv.hidden = view !== "players";
+  // only touch the DOM when something changed (keeps the dropdown and search box usable)
+  if (view === "report") { const h = reportHtml(r); if (h !== extraHtml.report) { extraHtml.report = h; rv.innerHTML = h; } }
+  if (view === "players") { const h = playersHtml(r); if (h !== extraHtml.players) { extraHtml.players = h; pv.innerHTML = h; } }
+}
+
+function reportHtml(r) {
+  if (!meState.accountId) return `<div class="empty">${esc(r.noAcc)}</div>`;
+  const now = Date.now() / 1000;
+  const opts = (matchesList || []).map(m => `<option value="${m.matchId}" ${m.matchId === reportId ? "selected" : ""}>${esc(m.heroName)} · ${m.won ? r.win : r.loss} · ${m.kda.join("/")} · ${esc(r.ago(now - m.start))}</option>`).join("");
+  let h = `<select class="sel" id="msel">${reportId && !(matchesList || []).some(m => m.matchId === reportId) ? `<option selected>${reportId}</option>` : ""}${opts || `<option>${esc(r.pick)}</option>`}</select>`;
+  const d = reportData;
+  if (!d || d.loading) return h + `<div class="empty">${esc(r.loading)}</div>`;
+  if (d.error) return h + `<div class="empty">${esc(r.err)}</div>`;
+  if (d.status !== "full" && d.status !== "basic") return h + `<div class="status">${esc(r.st[d.status] || d.status)}</div>`;
+  if (d.status === "basic") h += `<div class="status">${esc(r.st.basic)}</div>`;
+  h += `<section class="panel"><div class="row2"><img class="hp" src="/heroes/${d.hero.key}.png" alt=""><div><div class="res ${d.won ? "win" : "loss"}">${d.won ? r.win : r.loss}</div>
+    <div class="name">${esc(d.hero.name)}</div><div class="meta">${mm(d.duration)} · K/D/A ${d.kda.join("/")} · LH ${d.lh}/${d.dn} · NW ${(d.netWorth || 0).toLocaleString()}</div></div></div>
+    <table class="st"><tr>${r.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>${d.stats.map(s => {
+      const better = s.mine == null ? null : s.lowerBetter ? s.v <= s.mine : s.v >= s.mine;
+      return `<tr><td>${esc(r.stat[s.k])}</td><td><b>${(s.v || 0).toLocaleString()}</b></td><td>${s.mine == null ? "–" : `<span class="${better ? "up" : "down"}">${s.mine.toLocaleString()}</span>`}</td>
+        <td>${s.pct == null ? "–" : `<div class="pbar"><i style="width:${s.pct}%"></i></div><small class="meta">${esc(r.beat(s.pct))}</small>`}</td></tr>`; }).join("")}</table>
+    <div class="note">${esc(r.baseN(d.baseN))}</div></section>`;
+  if (d.notes.length) h += `<section class="panel"><div class="label">${esc(r.notesT)}</div><ul class="notes">${d.notes.map(n => {
+    const good = /Up|Early|top|Won/.test(n.t), bad = !good && /Down|Late|low|Lost|Deaths|killed|more/.test(n.t);
+    return `<li class="${good ? "good" : bad ? "bad" : ""}">${esc(r.note[n.t] ? r.note[n.t](n) : n.t)}</li>`; }).join("")}</ul></section>`;
+  if (d.items && d.items.length) h += `<section class="panel"><div class="label">${esc(r.itemsT)}</div><div class="its">${d.items.map(it => {
+    const cls = it.usual == null ? "" : it.time - it.usual >= 90 ? "late" : it.usual - it.time >= 90 ? "early" : "";
+    return `<div class="it" title="${esc(it.name)}"><img src="${ITEM_IMG(it.key)}" alt="" onerror="this.style.visibility='hidden'"><b class="${cls}">${mm(it.time)}</b>${it.usual != null ? `<span>${esc(r.usual(mm(it.usual)))}</span>` : ""}</div>`; }).join("")}</div></section>`;
+  if (d.goldAdv && d.goldAdv.length > 2) {
+    const g = d.goldAdv, max = Math.max(1000, ...g.map(Math.abs)), w = 300, x = i => (i / (g.length - 1) * w).toFixed(1), y = v => (30 - v / max * 28).toFixed(1);
+    const area = `M0,30 ${g.map((v, i) => `L${x(i)},${y(v)}`).join(" ")} L${w},30 Z`;
+    h += `<section class="panel"><div class="label">${esc(r.goldT)} <em>${g[g.length - 1] >= 0 ? "+" : ""}${Math.round(g[g.length - 1]).toLocaleString()}</em></div>
+      <svg id="gadv" viewBox="0 0 300 60" preserveAspectRatio="none"><defs><clipPath id="ca"><rect width="300" height="30"/></clipPath><clipPath id="cb"><rect y="30" width="300" height="30"/></clipPath></defs>
+      <path d="${area}" fill="#58c26a55" clip-path="url(#ca)"/><path d="${area}" fill="#e0563f55" clip-path="url(#cb)"/><line x1="0" x2="300" y1="30" y2="30" stroke="#7a5568" vector-effect="non-scaling-stroke"/></svg>
+      ${d.deaths && d.deaths.length ? `<div class="note">${esc(r.deathsT)} ${d.deaths.map(x => mm(x.time)).join(", ")}</div>` : ""}</section>`;
+  }
+  const metMap = new Map((metData || []).map(m => [m.accountId, m]));
+  const pl = side => d.players.filter(p => p.team === side).map(p => {
+    const m = p.accountId && metMap.get(p.accountId);
+    return `<div class="pl" ${p.accountId ? `data-acc="${p.accountId}"` : ""}><img src="/heroes/${p.hero}.png" alt=""><div style="min-width:0"><div class="nm">${esc(p.name || r.priv)}</div><small>${esc(p.heroName)} · ${rankName(p.rank)} · ${p.kda.join("/")}${p.party ? " · " + r.party : ""}</small></div>
+      <div class="met">${m ? esc(r.metN(m.with, m.against)) : ""}</div></div>`; }).join("");
+  h += `<section class="panel"><div class="label">${esc(r.playersT)}</div><div class="grp">${esc(r.ally)}</div>${pl("ally")}<div class="grp">${esc(r.enemy)}</div>${pl("enemy")}</section>`;
+  return h;
+}
+
+function playersHtml(r) {
+  if (!meState.accountId) return `<div class="empty">${esc(r.noAcc)}</div>`;
+  if (playerId) {
+    const p = playerData;
+    let h = `<button class="back" id="pback">${esc(r.backT)}</button>`;
+    if (!p || p.loading) return h + `<div class="empty">${esc(r.loading)}</div>`;
+    if (p.error) return h + `<div class="empty">${esc(r.err)}</div>`;
+    h += `<section class="panel"><div class="row2">${p.avatar ? `<img src="${esc(p.avatar)}" style="width:44px;height:44px;border-radius:8px" alt="">` : ""}<div><div class="name">${esc(p.name || "?")}</div><div class="meta">${esc(r.rank)} ${rankName(p.rank)}</div></div></div>`;
+    if (p.you) h += `<div class="label">${esc(r.you)}</div>` + (p.you.total ? `<div>${p.you.with ? esc(r.withT(p.you.with, p.you.withWin)) + "<br>" : ""}${p.you.against ? esc(r.vsT(p.you.against, p.you.againstWin)) : ""}</div>` : `<div class="meta">${esc(r.never)}</div>`);
+    h += `</section>`;
+    if (p.private) return h + `<div class="empty">${esc(r.privT)}</div>`;
+    const s = p.style;
+    if (s) h += `<section class="panel"><div class="label">${esc(r.styleT)} · ${esc(r.recent(s.n))}</div>
+      <div class="tags"><span class="chip n">${esc(r.role[s.role] || s.role)}</span>${s.tags.map(t => `<span class="chip s">${esc(r.tag[t] || t)}</span>`).join("")}</div>
+      <div class="kv"><div><u>${esc(r.wr)}</u><b>${Math.round(s.wins / s.n * 100)}%</b></div><div><u>${esc(r.kda)}</u><b>${s.k}/${s.d}/${s.a}</b></div><div><u>${esc(r.gpmAvg)}</u><b>${s.gpm}</b></div></div>
+      <div class="meta">${esc(r.streak)}: ${s.streak.split("").map(c => `<b style="color:${c === "W" ? "var(--good)" : "var(--dire)"}">${c}</b>`).join(" ")}${s.topHero && s.topHero.n >= 4 ? " · " + esc(r.mainHero(s.topHero.name, s.topHero.n)) : ""}</div></section>`;
+    if (p.pool30 && p.pool30.length) h += `<section class="panel"><div class="label">${esc(r.pool30(p.games30))}</div><div class="pool">${p.pool30.map(x => `<div title="${esc(x.name)}"><img src="/heroes/${x.key}.png" alt=""><b>${x.games}</b> · ${Math.round(x.win / x.games * 100)}%</div>`).join("")}</div></section>`;
+    return h;
+  }
+  const q = playerQuery.toLowerCase(), now = Date.now() / 1000;
+  const list = (metData || []).filter(m => !q || (m.name || "").toLowerCase().includes(q)).slice(0, 80);
+  return `<input class="search" id="psearch" placeholder="${esc(r.search)}" value="${esc(playerQuery)}"><section class="panel"><div class="label">${esc(r.metList)}</div>${
+    list.length ? list.map(m => `<div class="pl" data-acc="${m.accountId}"><span></span><div style="min-width:0"><div class="nm">${esc(m.name || "?")}</div><small>${m.last ? esc(r.ago(now - m.last)) : ""}</small></div><div class="met">${esc(r.metN(m.with, m.against))}</div></div>`).join("")
+      : `<div class="meta">${esc(metData ? r.noMet : r.loading)}</div>`}</section>`;
+}
+
+document.querySelector("main").addEventListener("click", e => {
+  const p = e.target.closest(".pl[data-acc]"); if (p) return openPlayer(+p.dataset.acc);
+  if (e.target.closest("#pback")) { playerId = null; playerData = null; loadPlayers(); renderExtra(); }
+});
+document.querySelector("main").addEventListener("change", e => { if (e.target.id === "msel") { reportId = e.target.value; loadReport(); } });
+document.querySelector("main").addEventListener("input", e => {
+  if (e.target.id !== "psearch") return;
+  playerQuery = e.target.value; const pos = e.target.selectionStart; renderExtra();
+  const el = document.getElementById("psearch"); if (el !== e.target) { el.focus(); el.setSelectionRange(pos, pos); }
+});
+document.getElementById("lang").addEventListener("click", () => renderExtra());
+renderExtra();
+</script>
+
 </body>
 </html>

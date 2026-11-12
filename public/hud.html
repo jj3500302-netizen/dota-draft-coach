@@ -11,6 +11,7 @@
   .grip { -webkit-app-region:drag; width:12px; align-self:stretch; display:grid; place-items:center; color:#a98c98; font-size:9px; cursor:move; }
   .s u { text-decoration:none; color:#d5645f; font-size:9px; font-weight:700; margin-right:3px; letter-spacing:.03em; }
   .s b { font-variant-numeric:tabular-nums; font-size:11.5px; }
+  .s em { font-style:normal; font-size:9.5px; margin-left:2px; font-variant-numeric:tabular-nums; } .s em.up { color:#58c26a; } .s em.down { color:#e6a15c; }
   .more { background:none; border:0; color:#a98c98; font-size:11px; padding:0 2px; cursor:pointer; }
   .more:hover { color:#f4eaec; }
   .pops { display:flex; flex-direction:column; gap:3px; }
@@ -26,8 +27,8 @@
 <body>
 <div class="strip" id="strip">
   <span class="grip">⋮⋮</span>
-  <span class="s"><u>GPM</u><b id="gpm">0</b></span>
-  <span class="s"><u>XPM</u><b id="xpm">0</b></span>
+  <span class="s"><u>GPM</u><b id="gpm">0</b><em id="gpmd"></em></span>
+  <span class="s"><u>XPM</u><b id="xpm">0</b><em id="xpmd"></em></span>
   <span class="s"><u>LH</u><b id="lh">0</b></span>
   <span class="s"><u>DN</u><b id="dn">0</b></span>
   <span class="s"><u>KDA</u><b id="kda">0/0/0</b></span>
@@ -108,6 +109,15 @@ function onData() {
   if (g.clock !== clockSeen) { clockSeen = g.clock; clockBase = g.clock; clockAt = performance.now(); }
   document.getElementById("gpm").textContent = g.gpm;
   document.getElementById("xpm").textContent = g.xpm;
+  // ▲/▼ against your own usual number on this hero (same minute when replays allow, else whole-game average)
+  for (const k of ["gpm", "xpm"]) {
+    const el = document.getElementById(k + "d"), base = g.mine && g.mine[k];
+    if (!base || g.clock < 120) { el.textContent = ""; el.title = ""; continue; }
+    const d = g[k] - base;
+    el.textContent = (d >= 0 ? "▲" : "▼") + Math.abs(d);
+    el.className = d >= 0 ? "up" : "down";
+    el.title = (g.mine.kind === "minute" ? "vs your usual at this minute: " : "vs your usual whole-game average: ") + base;
+  }
   document.getElementById("lh").textContent = g.lh;
   document.getElementById("dn").textContent = g.dn;
   document.getElementById("kda").textContent = `${g.k}/${g.d}/${g.a}`;
