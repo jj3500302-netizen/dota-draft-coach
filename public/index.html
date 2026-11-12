@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Draft Coach</title>
+<style>
+  :root {
+    --bg:#05050f; --panel:#170f1c; --panel2:#2e1f2f; --line:#4a2c3e; --text:#f4eaec; --muted:#a98c98;
+    --rad:#58c26a; --dire:#e0563f; --accent:#d5645f; --good:#58c26a; --syn:#c48bb0; --bad:#e6a15c;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13.5px/1.45 "Segoe UI", "Leelawadee UI", system-ui, sans-serif; display:flex; flex-direction:column; overflow:hidden; }
+  button { font:inherit; color:inherit; cursor:pointer; }
+
+  /* title bar (draggable in the desktop app) */
+  .bar { height:40px; flex:none; display:flex; align-items:center; gap:10px; padding:0 6px 0 12px; -webkit-app-region:drag; border-bottom:1px solid var(--line); }
+  .logo { width:18px; height:18px; border-radius:5px; background:linear-gradient(135deg, var(--accent), #93393d); flex:none; }
+  .bar b { font-size:13px; letter-spacing:.02em; }
+  .pill { font-size:11.5px; padding:2px 9px; border-radius:99px; background:var(--panel2); color:var(--muted); display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .pill i { width:7px; height:7px; border-radius:50%; background:#7a5568; }
+  .pill.live { color:var(--text); } .pill.live i { background:var(--good); box-shadow:0 0 0 3px #58c26a33; }
+  .tools { margin-left:auto; display:flex; gap:6px; -webkit-app-region:no-drag; }
+  .tbtn { background:none; border:1px solid var(--line); border-radius:6px; padding:2px 8px; font-size:11.5px; color:var(--muted); }
+  .tbtn:hover { color:var(--text); }
+  .pin { background:none; border:1px solid var(--line); border-radius:6px; padding:2px 8px; font-size:11.5px; color:var(--muted); display:none; }
+  .pin.on { color:var(--accent); border-color:#d5645f66; }
+
+  main { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:12px; }
+  main::-webkit-scrollbar { width:8px; } main::-webkit-scrollbar-thumb { background:var(--line); border-radius:4px; }
+
+  /* draft board */
+  .board { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .team-h { display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; letter-spacing:.08em; margin-bottom:5px; }
+  .team.radiant .team-h { color:var(--rad); } .team.dire .team-h { color:var(--dire); }
+  .badge { font-size:10.5px; letter-spacing:0; font-weight:600; padding:1px 7px; border-radius:99px; background:#d5645f22; color:var(--accent); }
+  .team-h button { margin-left:auto; background:none; border:0; color:var(--muted); font-size:11px; font-weight:400; letter-spacing:0; padding:0; }
+  .team-h button:hover { color:var(--text); }
+  .slots { display:grid; grid-template-columns:repeat(5,1fr); gap:5px; }
+  .slot { position:relative; aspect-ratio:16/10; border-radius:6px; overflow:hidden; background:#0b0812; border:1px solid var(--line); }
+  .slot img { width:100%; height:100%; object-fit:cover; display:block; }
+  .slot.me { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .slot .p { position:absolute; left:3px; top:3px; font-size:10px; font-weight:700; background:#000b; border-radius:4px; padding:0 4px; color:#eadfe3; }
+  .slot.me .p { background:var(--accent); color:#1a0a0c; }
+  .slot .q { position:absolute; inset:0; display:grid; place-items:center; color:#5a3a4c; font-size:16px; }
+  .vs { text-align:center; color:#6b3a4f; font-size:10.5px; font-weight:700; letter-spacing:.2em; }
+
+  /* position picker */
+  .label { font-size:11px; color:var(--muted); margin-bottom:5px; display:flex; gap:6px; }
+  .label em { font-style:normal; color:var(--accent); }
+  .seg { display:grid; grid-template-columns:1.2fr repeat(5,1fr); gap:4px; }
+  .seg button { background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:5px 2px; line-height:1.2; color:var(--muted); }
+  .seg button b { display:block; font-size:13px; color:var(--text); }
+  .seg button span { font-size:10px; }
+  .seg button.on { background:#d5645f1a; border-color:var(--accent); color:var(--accent); }
+  .seg button.on b { color:var(--accent); }
+  .seg.ask { outline:1px dashed var(--accent); outline-offset:4px; border-radius:8px; }
+
+  .needs { display:flex; flex-wrap:wrap; gap:5px; align-items:center; font-size:12px; color:var(--muted); }
+  .needs span { background:var(--panel2); border:1px solid var(--line); border-radius:99px; padding:1px 9px; color:var(--text); }
+
+  /* tabs + hero cards */
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); }
+  .tabs button { background:none; border:0; border-bottom:2px solid transparent; padding:6px 10px; color:var(--muted); font-weight:600; }
+  .tabs button.on { color:var(--text); border-bottom-color:var(--accent); }
+  .list { display:flex; flex-direction:column; gap:6px; }
+  .card { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px; }
+  .card img { width:84px; aspect-ratio:16/9; object-fit:cover; border-radius:6px; display:block; }
+  .card .rank { position:absolute; left:-5px; top:-5px; width:18px; height:18px; border-radius:50%; background:var(--panel2); border:1px solid var(--line); font-size:10.5px; font-weight:700; display:grid; place-items:center; color:var(--muted); }
+  .card .pic { position:relative; }
+  .card.top { border-color:#d5645f80; background:linear-gradient(180deg, #d5645f14, var(--panel) 70%); }
+  .card.top img { width:112px; }
+  .card.top .rank { background:var(--accent); color:#1a0a0c; border-color:var(--accent); }
+  .name { font-weight:700; font-size:14px; }
+  .card.top .name { font-size:16px; }
+  .meta { color:var(--muted); font-size:11.5px; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+  .chip { font-size:11.5px; padding:1px 7px; border-radius:5px; white-space:nowrap; }
+  .chip.c { background:#58c26a1f; color:var(--good); } .chip.s { background:#c48bb01f; color:var(--syn); }
+  .chip.n { background:#d5645f1f; color:var(--accent); } .chip.w { background:#e6a15c1f; color:var(--bad); }
+  .score { text-align:right; font-variant-numeric:tabular-nums; font-weight:800; font-size:15px; min-width:44px; }
+  .score.pos { color:var(--good); } .score.neg { color:var(--bad); }
+  .score small { display:block; font-weight:400; font-size:10px; color:var(--muted); }
+  .empty { text-align:center; color:var(--muted); padding:36px 16px; border:1px dashed var(--line); border-radius:10px; }
+  .empty b { display:block; color:var(--text); font-size:15px; margin-bottom:4px; }
+  .foot { color:#8a6878; font-size:11px; text-align:center; padding-bottom:4px; }
+  .legend { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; font-size:11px; color:var(--muted); }
+  .legend i { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px; }
+
+  [hidden] { display:none !important; }
+  .tbtn.ic { padding:2px 7px; font-size:13px; line-height:1.3; }
+  .dk { display:none; } body.desktop .dk { display:revert; }
+  .settings { flex:none; padding:8px 12px; border-bottom:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; gap:8px; font-size:12px; color:var(--muted); }
+  body.desktop .settings label.dk { display:flex; align-items:center; gap:8px; }
+  .settings input[type=range] { flex:1; min-width:0; accent-color:var(--accent); }
+  .settings .row { display:flex; gap:6px; flex-wrap:wrap; }
+  .card { cursor:pointer; grid-template-rows:auto auto; }
+  .card:hover { border-color:#6b3a4f; }
+  .card .pic { grid-row:1 / 3; align-self:start; }
+  .card .chips { grid-column:2 / -1; margin-top:0; }
+  .toast { position:fixed; left:8px; right:8px; bottom:10px; background:#2e1f2f; border:1px solid var(--accent); color:var(--text); border-radius:8px; padding:7px 10px; font-size:12px; text-align:center; z-index:5; }
+
+  /* in-game view */
+  .view { display:flex; flex-direction:column; gap:12px; }
+  .alert { position:sticky; top:0; z-index:4; background:#2e1a22; border:1px solid var(--accent); color:var(--accent); border-radius:9px; padding:8px 10px; font-weight:700; font-size:15px; text-align:center; animation:pulse 1s ease-in-out infinite alternate; }
+  .alert small { display:block; font-weight:400; font-size:11.5px; color:var(--text); }
+  @keyframes pulse { from { box-shadow:0 0 0 0 #d5645f00; } to { box-shadow:0 0 0 4px #d5645f33; } }
+  .hud { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .clock { display:flex; align-items:baseline; gap:8px; }
+  .clock b { font-size:22px; font-variant-numeric:tabular-nums; }
+  .clock span { color:var(--muted); font-size:12px; }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .tile { background:var(--panel2); border-radius:8px; padding:6px 8px; min-width:0; }
+  .tile u { text-decoration:none; display:block; font-size:10.5px; color:var(--muted); letter-spacing:.04em; }
+  .tile b { font-size:17px; font-variant-numeric:tabular-nums; }
+  .tile small { display:block; font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tile small.up { color:var(--good); } .tile small.down { color:var(--bad); }
+  #spark { width:100%; height:44px; display:block; }
+  .objs { display:flex; flex-direction:column; gap:4px; }
+  .obj { display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:5px 9px; }
+  .obj i { width:8px; height:8px; border-radius:50%; flex:none; background:var(--muted); }
+  .obj span { flex:1; min-width:0; }
+  .obj b { font-variant-numeric:tabular-nums; }
+  .obj.soon { border-color:var(--accent); background:#d5645f14; } .obj.soon b { color:var(--accent); }
+  .obj small { color:var(--muted); font-size:11px; margin-left:4px; }
+  .btnrow { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .btnrow .tbtn.on { color:var(--accent); border-color:#d5645f66; }
+  .icard { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; align-items:center; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:7px 8px; }
+  .icard img { width:54px; border-radius:5px; display:block; grid-row:1 / 3; align-self:start; }
+  .icard .who { font-size:10.5px; color:var(--muted); font-weight:400; margin-left:6px; }
+  .note { color:var(--muted); font-size:11.5px; }
+  .mutes { display:flex; flex-wrap:wrap; gap:4px; }
+  .mutes button { background:none; border:1px solid var(--line); border-radius:99px; padding:1px 8px; font-size:11px; color:var(--muted); text-decoration:line-through; }
+  .mutes button.on { color:var(--text); border-color:#d5645f66; text-decoration:none; }
+
+  body.desktop .alert { display:none !important; }
+  body.compact .view { gap:6px; }
+  body.compact .alert { font-size:12.5px; padding:5px 6px; } body.compact .alert small { font-size:10.5px; }
+  body.compact .hud { padding:6px; gap:5px; } body.compact .clock b { font-size:17px; } body.compact .clock span { font-size:10.5px; }
+  body.compact .tiles { grid-template-columns:repeat(2,1fr); gap:3px; } body.compact .tile { padding:3px 6px; } body.compact .tile b { font-size:14px; }
+  body.compact #spark { height:30px; }
+  body.compact .obj { padding:3px 6px; gap:5px; font-size:11.5px; } body.compact .obj small { display:none; }
+  body.compact .btnrow .tbtn { font-size:10.5px; padding:1px 5px; }
+  body.compact #gameview .label { display:flex !important; font-size:10px; margin-bottom:2px; }
+  body.compact .icard { padding:4px; gap:2px 6px; } body.compact .icard img { width:36px; grid-row:auto; }
+  body.compact .icard .chips { display:none; grid-column:1 / -1; } body.compact .icard:hover .chips { display:flex; }
+  body.compact .icard .who, body.compact .note { display:none; }
+
+  /* compact mode: narrow column for the empty strip at the right of Dota's draft screen */
+  body.compact .bar { padding:0 4px 0 8px; gap:6px; height:32px; }
+  body.compact .bar b, body.compact .pill span, body.compact .label, body.compact .vs, body.compact .team-h button,
+  body.compact .seg span, body.compact .needs, body.compact .legend, body.compact .foot, body.compact .meta, body.compact .score small { display:none !important; }
+  body.compact .pill { padding:0; background:none; }
+  body.compact .tbtn.ic { padding:1px 5px; font-size:12px; }
+  body.compact main { padding:6px; gap:6px; }
+  body.compact .board { padding:5px; gap:4px; border-radius:8px; }
+  body.compact .team-h { font-size:9.5px; margin-bottom:2px; } body.compact .badge { font-size:9px; padding:0 5px; }
+  body.compact .slots { gap:2px; } body.compact .slot { border-radius:3px; }
+  body.compact .slot .p { font-size:8px; left:1px; top:1px; padding:0 2px; } body.compact .slot .q { font-size:11px; }
+  body.compact .seg { grid-template-columns:1.4fr repeat(5,1fr); gap:2px; }
+  body.compact .seg button { padding:3px 0; border-radius:5px; } body.compact .seg button b { font-size:11px; }
+  body.compact .tabs button { padding:3px 6px; font-size:12px; }
+  body.compact .list { gap:4px; }
+  body.compact .card { gap:2px 6px; padding:4px; border-radius:7px; }
+  body.compact .card .pic { grid-row:auto; }
+  body.compact .card img, body.compact .card.top img { width:52px; border-radius:4px; }
+  body.compact .card .rank { width:14px; height:14px; font-size:9px; left:-3px; top:-3px; }
+  body.compact .name, body.compact .card.top .name { font-size:12px; line-height:1.15; }
+  body.compact .score { font-size:12px; min-width:0; }
+  body.compact .card .chips { display:none; grid-column:1 / -1; }
+  body.compact .card:hover .chips { display:flex; }
+  body.compact .chip { font-size:10.5px; white-space:normal; }
+  body.compact .empty { padding:16px 6px; font-size:11.5px; } body.compact .empty b { font-size:12.5px; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="logo"></span><b>Draft Coach</b>
+  <span class="pill" id="status"><i></i><span>กำลังเชื่อมต่อ</span></span>
+  <span class="tools"><button class="tbtn ic" id="gear">⚙</button><button class="tbtn ic" id="mode">◧</button><button class="tbtn ic dk" id="min">—</button><button class="tbtn ic dk" id="close">✕</button></span>
+</div>
+<div class="settings" id="settings" hidden>
+  <label class="dk"><span data-i="opacity"></span><input type="range" id="opacity" min="40" max="100" step="5"><span id="opv"></span></label>
+  <div class="row"><button class="tbtn" id="lang"></button><button class="pin on" id="pin" data-i="pin"></button><button class="tbtn" id="sound"></button></div>
+  <div><span data-i="alertsFor"></span><div class="mutes" id="mutes"></div></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<main>
+ <div class="view" id="gameview" hidden>
+  <div class="alert" id="alert" hidden></div>
+  <section class="hud">
+    <div class="clock"><b id="gclock">0:00</b><span id="gday"></span><span id="ghero"></span></div>
+    <div class="tiles" id="tiles"></div>
+    <svg id="spark" viewBox="0 0 300 44" preserveAspectRatio="none"></svg>
+    <div class="note" id="benchnote"></div>
+  </section>
+  <section>
+    <div class="label"><span data-i="objectives"></span></div>
+    <div class="objs" id="objs"></div>
+    <div class="btnrow"><button class="tbtn" id="roshBtn"></button><button class="tbtn" id="tormBtn"></button></div>
+  </section>
+  <section>
+    <div class="label"><span data-i="itemsT"></span></div>
+    <div class="list" id="items"></div>
+  </section>
+ </div>
+ <div class="view" id="draftview">
+  <section class="board">
+    <div class="team radiant" id="radiant"><div class="team-h"><span>RADIANT</span><span class="badge" hidden data-i="us"></span><button data-side="radiant" data-i="setus"></button></div><div class="slots"></div></div>
+    <div class="vs">VS</div>
+    <div class="team dire" id="dire"><div class="team-h"><span>DIRE</span><span class="badge" hidden data-i="us"></span><button data-side="dire" data-i="setus"></button></div><div class="slots"></div></div>
+  </section>
+
+  <section>
+    <div class="label"><span data-i="yourpos"></span> <em id="posnote"></em></div>
+    <div class="seg" id="seg">
+      <button data-pos="auto"><b>Auto</b><span data-i="fromscreen"></span></button>
+      <button data-pos="1"><b>1</b><span>Carry</span></button>
+      <button data-pos="2"><b>2</b><span>Mid</span></button>
+      <button data-pos="3"><b>3</b><span>Offlane</span></button>
+      <button data-pos="4"><b>4</b><span>Support</span></button>
+      <button data-pos="5"><b>5</b><span>Hard sup</span></button>
+    </div>
+  </section>
+
+  <div class="needs" id="needs" hidden></div>
+
+  <section>
+    <div class="tabs" id="tabs"><button data-tab="rec" class="on" data-i="rec"></button><button data-tab="avoid" data-i="avoid"></button></div>
+  </section>
+  <div class="list" id="list"></div>
+  <div class="legend" id="legend" hidden>
+    <span><i style="background:var(--good)"></i><span data-i="lgc"></span></span><span><i style="background:var(--syn)"></i><span data-i="lgs"></span></span>
+    <span><i style="background:var(--accent)"></i><span data-i="lgn"></span></span><span><i style="background:var(--bad)"></i><span data-i="lgw"></span></span>
+  </div>
+  <div class="foot" id="foot"></div>
+ </div>
+</main>
+<script>
+const T = {
+  th: {
+    pin: "📌 ปักไว้บนสุด", opacity: "ความโปร่งใส", copyTip: "คลิกเพื่อคัดลอกชื่อฮีโร่",
+    copied: n => `คัดลอก "${n}" แล้ว — พิมพ์หรือวางในหน้าเลือกฮีโร่ของ Dota`, tGear: "ตั้งค่า", tMode: "สลับโหมดย่อ / เต็ม", us: "ทีมเรา", setus: "ตั้งเป็นทีมเรา", yourpos: "ตำแหน่งของคุณ", fromscreen: "อ่านจากจอ",
+    rec: "ควรหยิบ", avoid: "ควรเลี่ยง", lgc: "ชนะทางศัตรู", lgs: "เข้ากับเพื่อน", lgn: "ทีมยังขาด", lgw: "ข้อควรระวัง",
+    pos: { 1: "Carry (เซฟเลน)", 2: "Mid (เลนกลาง)", 3: "Offlane (ออฟเลน)", 4: "Support (ซัพพอร์ต)", 5: "Hard support (ซัพพอร์ตหลัก)" },
+    role: { Initiator: "ตัวเปิดไฟต์", Disabler: "ตัวคุม (stun/disable)", Durable: "ตัวถึก", Pusher: "ตัวดันป้อม" },
+    stOff: "ไม่ได้เชื่อมต่อ", stLive: "กำลังอ่านดราฟ", stGame: "อยู่ในเกม", stWait: "รอเข้าเกม",
+    you: "คุณ", read: p => `· อ่านจาก ranked roles: ${p}`, manual: p => `· เลือกเอง: ${p}`,
+    ask: "· เกมนี้ไม่มีป้ายตำแหน่ง — กดเลือกตำแหน่งที่คุณจะเล่น", notyet: "· ยังอ่านไม่ได้ — กดเลือกเองได้",
+    counter: (h, p) => `ชนะทาง ${h} ${p}`, synergy: (h, p) => `เข้ากับ ${h} ${p}`, need: r => `ทีมยังขาด${r}`,
+    weak: (h, p) => `แพ้ทาง ${h} ${p}`, cores: n => `ทีมมีตัว Carry แล้ว ${n} ตัว`,
+    winrate: "winrate", share: n => ` · เล่นตำแหน่งนี้ ${n}%`, score: "คะแนน", needs: "ทีมยังขาด",
+    setup: { installed: "เปิดครั้งแรก: เพิ่มไฟล์ตั้งค่าให้ Dota 2 แล้ว ถ้าเปิด Dota อยู่ให้ปิดแล้วเปิดใหม่หนึ่งครั้ง", notfound: "หา Dota 2 ในเครื่องนี้ไม่เจอ แอปเลยไม่รู้ว่าเกมเริ่มเมื่อไหร่", failed: "เพิ่มไฟล์ตั้งค่าให้ Dota 2 ไม่ได้ (ไม่มีสิทธิ์) ลองเปิดแอปแบบ Run as administrator หนึ่งครั้ง" },
+    e1: "รอเข้าช่วงดราฟ", e1b: "เปิดแอปนี้ทิ้งไว้ แล้วเข้าเกม Dota 2 ได้เลย<br>พอถึงหน้าเลือกฮีโร่ แอปจะอ่านดราฟให้เอง",
+    e2: "กำลังรอ pick แรก", e2b: "คำแนะนำจะขึ้นทันทีที่มีฮีโร่ถูกเลือก",
+    none: "ไม่มีฮีโร่ที่เข้าเงื่อนไข", noavoid: "ยังไม่มีตัวที่ควรเลี่ยงชัด ๆ",
+    foot: (n, a, b) => `สถิติจาก ${n} เกม ranked แรงก์ Legend+ (${a} – ${b})`, locale: "th-TH", other: "EN",
+    objectives: "สิ่งที่กำลังจะเกิด", itemsT: "ไอเทมแก้ทางฝั่งตรงข้าม", alertsFor: "แจ้งเตือนเรื่อง", soundOn: "🔔 เสียงเตือน: เปิด", soundOff: "🔕 เสียงเตือน: ปิด",
+    day: "กลางวัน", night: "กลางคืน", lvl: "เลเวล", inT: s => `อีก ${s}`, now: "ตอนนี้!", nw: "มูลค่ารวม", gold: "ทอง", perMin: "ต่อนาที",
+    median: v => `ค่ากลาง ${v}`, topP: p => `ดีกว่า ${p}%`,
+    benchNote: "เทียบกับตัวเลขตอนจบเกมของคนเล่นฮีโร่นี้ (OpenDota) — ช่วงต้นเกมตัวเลขจะต่ำกว่าเป็นปกติ",
+    obj: { bounty: "Bounty rune", water: "Water rune", power: "Power rune", wisdom: "Shrine of Wisdom (XP)", lotus: "Lotus", tormentor: "Tormentor เกิด",
+      night: "เข้ากลางคืน", day: "เข้ากลางวัน", roshMove: "Roshan ย้ายรัง", aegis: "Aegis หมดอายุ", roshMin: "Roshan อาจเกิดแล้ว", roshMax: "Roshan เกิดแน่นอน", tormRe: "Tormentor เกิดใหม่", daynight: "กลางวัน/กลางคืน" },
+    roshBtn: "Roshan ตายตอนนี้", roshOn: "ล้างเวลา Roshan", tormBtn: "Tormentor ตายตอนนี้", tormOn: "ล้างเวลา Tormentor",
+    who: { core: "สำหรับ core", sup: "สำหรับ support", any: "" },
+    trait: { evasion: h => `${h} หลบการตี`, passive: h => `ปิด passive ของ ${h}`, heal: h => `ลดฮีล/regen ของ ${h}`, invis: h => `${h} ล่องหน`,
+      swarm: h => `เคลียร์ร่างแยก/ลูกสมุนของ ${h}`, magic: h => `กันดาเมจเวทจาก ${h}`, target: h => `กันสกิลล็อกเป้าของ ${h}`, silence: h => `แก้ silence ของ ${h}`,
+      physical: h => `กันตีธรรมดาจาก ${h}`, slippery: h => `จับ ${h} ที่หนีเก่ง`, mana: h => `เผามานา ${h}`, buffs: h => `ล้างบัฟของ ${h}`, jump: h => `หนีตอน ${h} กระโดดใส่` },
+    noEnemy: "เกมนี้แอปไม่ได้อ่านดราฟ เลยไม่รู้ว่าฝั่งตรงข้ามเป็นตัวอะไร", noItems: "ไม่มีไอเทมแก้ทางที่ชัดเจนเพิ่มแล้ว",
+    needRestart: "ยังมองไม่เห็นไอเทมที่คุณมี — ปิดแล้วเปิด Dota ใหม่หนึ่งครั้ง",
+  },
+  en: {
+    pin: "📌 Always on top", opacity: "Opacity", copyTip: "Click to copy the hero name",
+    copied: n => `Copied "${n}" — type or paste it in Dota's hero picker`, tGear: "Settings", tMode: "Compact / full", us: "Our team", setus: "Set as our team", yourpos: "Your position", fromscreen: "read screen",
+    rec: "Pick", avoid: "Avoid", lgc: "Counters enemy", lgs: "Fits teammate", lgn: "Team needs", lgw: "Watch out",
+    pos: { 1: "Carry (safe lane)", 2: "Mid", 3: "Offlane", 4: "Support", 5: "Hard support" },
+    role: { Initiator: "an initiator", Disabler: "disables/stuns", Durable: "a tank", Pusher: "a pusher" },
+    stOff: "Disconnected", stLive: "Reading draft", stGame: "In game", stWait: "Waiting for a game",
+    you: "You", read: p => `· from ranked roles: ${p}`, manual: p => `· chosen: ${p}`,
+    ask: "· no role labels in this game — pick the position you will play", notyet: "· not read yet — you can pick it yourself",
+    counter: (h, p) => `Good vs ${h} ${p}`, synergy: (h, p) => `Works with ${h} ${p}`, need: r => `Team needs ${r}`,
+    weak: (h, p) => `Weak vs ${h} ${p}`, cores: n => `Team already has ${n} carries`,
+    winrate: "winrate", share: n => ` · plays this position ${n}%`, score: "score", needs: "Team needs",
+    setup: { installed: "First run: setup file added to Dota 2. If Dota is open, restart it once.", notfound: "Could not find Dota 2 on this PC, so the app cannot tell when a game starts.", failed: "Could not add the setup file to Dota 2 (no permission). Try running the app as administrator once." },
+    e1: "Waiting for the draft", e1b: "Leave this app open and queue for a Dota 2 game.<br>It starts reading when hero selection begins.",
+    e2: "Waiting for the first pick", e2b: "Suggestions appear as soon as a hero is picked",
+    none: "No heroes match", noavoid: "Nothing clearly bad to pick yet",
+    foot: (n, a, b) => `Stats from ${n} ranked games, Legend+ (${a} – ${b})`, locale: "en-GB", other: "ไทย",
+    objectives: "Coming up", itemsT: "Items against their lineup", alertsFor: "Alert me about", soundOn: "🔔 Alert sound: on", soundOff: "🔕 Alert sound: off",
+    day: "Day", night: "Night", lvl: "Level", inT: s => `in ${s}`, now: "now!", nw: "Net worth", gold: "Gold", perMin: "per min",
+    median: v => `median ${v}`, topP: p => `beats ${p}%`,
+    benchNote: "Compared with end-of-game numbers for this hero (OpenDota) — early-game numbers are normally lower",
+    obj: { bounty: "Bounty runes", water: "Water runes", power: "Power rune", wisdom: "Shrine of Wisdom (XP)", lotus: "Lotus", tormentor: "Tormentor spawns",
+      night: "Night falls", day: "Day breaks", roshMove: "Roshan changes pit", aegis: "Aegis expires", roshMin: "Roshan may be back", roshMax: "Roshan is up for sure", tormRe: "Tormentor respawns", daynight: "Day / night" },
+    roshBtn: "Roshan died now", roshOn: "Clear Roshan timer", tormBtn: "Tormentor died now", tormOn: "Clear Tormentor timer",
+    who: { core: "for cores", sup: "for supports", any: "" },
+    trait: { evasion: h => `${h} has evasion`, passive: h => `Breaks ${h}'s passive`, heal: h => `Cuts ${h}'s healing`, invis: h => `${h} goes invisible`,
+      swarm: h => `Clears ${h}'s illusions/summons`, magic: h => `Blocks magic damage from ${h}`, target: h => `Blocks ${h}'s targeted spell`, silence: h => `Removes ${h}'s silence`,
+      physical: h => `Stops right-clicks from ${h}`, slippery: h => `Pins down ${h}`, mana: h => `Burns ${h}'s mana`, buffs: h => `Strips ${h}'s buffs`, jump: h => `Escape when ${h} jumps you` },
+    noEnemy: "The draft was not read this game, so the enemy heroes are unknown", noItems: "No more clear counter items",
+    needRestart: "Can't see your items yet — restart Dota once",
+  },
+};
+const store = { get: (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+let lang = store.get("lang", "th") === "en" ? "en" : "th";
+let last = { gsi: {}, draft: null, roles: null, advice: null, capturing: false };
+let sidePref = "auto";            // "auto" follows GSI; a manual choice lasts until the next match
+let posPref = "auto";
+let tab = "rec";
+let connected = false, matchSeen = null;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const pct = x => (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%";
+
+function chip(r) {
+  const t = T[lang];
+  const [cls, text] = r.t === "counter" ? ["c", t.counter(r.hero, pct(r.v))] : r.t === "synergy" ? ["s", t.synergy(r.hero, pct(r.v))]
+    : r.t === "need" ? ["n", t.need(t.role[r.role] || r.role)] : r.t === "weak" ? ["w", t.weak(r.hero, pct(r.v))] : ["w", t.cores(r.n)];
+  return `<span class="chip ${cls}">${esc(text)}</span>`;
+}
+function card(h, i, bad) {
+  const t = T[lang];
+  const chips = bad ? h.warnings.map(chip).concat(h.reasons.slice(0, 1).map(chip)) : h.reasons.map(chip).concat(h.warnings.map(chip));
+  const share = h.posShare != null ? t.share(Math.round(h.posShare * 100)) : "";
+  return `<div class="card ${!bad && i === 0 ? "top" : ""}" data-name="${esc(h.name)}" title="${esc(t.copyTip)}">
+    <div class="pic"><img src="/heroes/${h.key}.png" alt=""><span class="rank">${i + 1}</span></div>
+    <div><div class="name">${esc(h.name)}</div><div class="meta">${t.winrate} ${(h.winrate * 100).toFixed(1)}%${share}</div></div>
+    <div class="score ${h.score >= 0 ? "pos" : "neg"}">${h.score >= 0 ? "+" : ""}${h.score.toFixed(1)}<small>${t.score}</small></div><div class="chips">${chips.join("")}</div></div>`;
+}
+
+function render() {
+  const t = T[lang];
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i]").forEach(el => { el.textContent = t[el.dataset.i]; });
+  document.getElementById("lang").textContent = t.other;
+  document.getElementById("gear").title = t.tGear; document.getElementById("mode").title = t.tMode;
+
+  const { gsi, draft, roles, advice, capturing } = last;
+  if (gsi.matchid && gsi.matchid !== matchSeen) { matchSeen = gsi.matchid; sidePref = "auto"; posPref = "auto"; }
+  const us = sidePref === "auto" ? (gsi.team === "radiant" || gsi.team === "dire" ? gsi.team : "radiant") : sidePref;
+  const mySlot = gsi.team === us && gsi.teamSlot != null ? gsi.teamSlot : null;
+  const detected = roles && mySlot != null ? roles[us][mySlot] : null;
+  const anyRole = roles && [...roles.radiant, ...roles.dire].some(Boolean);   // ranked role queue shows labels
+  const pos = posPref === "auto" ? (detected || 0) : +posPref;
+
+  curPos = pos;
+  const inGame = !!last.game;
+  document.getElementById("gameview").hidden = !inGame;
+  document.getElementById("draftview").hidden = inGame;
+  document.getElementById("sound").textContent = soundOn ? t.soundOn : t.soundOff;
+  document.getElementById("mutes").innerHTML = MUTABLE.map(id => `<button data-id="${id}" class="${muted.has(id) ? "" : "on"}">${esc(t.obj[id])}</button>`).join("");
+  const st = document.getElementById("status");
+  if (inGame) { st.classList.toggle("live", connected); st.lastElementChild.textContent = connected ? t.stGame : t.stOff; renderGame(); tick(); return; }
+  st.classList.toggle("live", connected && capturing);
+  st.lastElementChild.textContent = !connected ? t.stOff : capturing ? t.stLive : gsi.state ? t.stGame : t.stWait;
+
+  for (const side of ["radiant", "dire"]) {
+    const el = document.getElementById(side);
+    el.querySelector(".badge").hidden = us !== side;
+    el.querySelector("button").hidden = us === side;
+    const slots = draft ? draft[side] : Array(5).fill({ state: "empty" });
+    el.querySelector(".slots").innerHTML = slots.map((s, i) => {
+      const me = side === us && i === mySlot, p = (me && pos) || (roles && roles[side][i]) || null;
+      const tag = me ? `<span class="p">${t.you}${p ? " · " + p : ""}</span>` : p ? `<span class="p">${p}</span>` : "";
+      return `<div class="slot ${me ? "me" : ""}" title="${s.state === "picked" ? esc(s.hero) : ""}">${s.state === "picked" ? `<img src="/heroes/${s.key}.png" alt="">` : `<span class="q">?</span>`}${tag}</div>`;
+    }).join("");
+  }
+
+  // position: ranked roles are read from the screen; otherwise the player picks it
+  const needPick = posPref === "auto" && !detected;
+  document.querySelectorAll("#seg button").forEach(b => b.classList.toggle("on", b.dataset.pos === String(posPref)));
+  document.getElementById("seg").classList.toggle("ask", needPick && !!draft);
+  document.getElementById("posnote").textContent = posPref !== "auto" ? t.manual(t.pos[pos])
+    : detected ? t.read(t.pos[detected]) : draft && !anyRole ? t.ask : t.notyet;
+
+  const a = advice && advice[us] && advice[us][pos];
+  const needs = document.getElementById("needs"), list = document.getElementById("list");
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  document.getElementById("legend").hidden = !a;
+  if (!a) {
+    needs.hidden = true;
+    list.innerHTML = `<div class="empty"><b>${capturing ? t.e2 : t.e1}</b>${capturing ? t.e2b : t.e1b}</div>` + (t.setup[setupState] ? `<div class="empty" style="border-color:var(--accent);padding:12px">${esc(t.setup[setupState])}</div>` : "");
+    document.getElementById("foot").textContent = "";
+    return;
+  }
+  needs.hidden = !a.missingRoles.length;
+  needs.innerHTML = esc(t.needs) + " " + a.missingRoles.map(r => `<span>${esc(t.role[r] || r)}</span>`).join("");
+  const rows = tab === "rec" ? a.recommend : a.avoid;
+  list.innerHTML = rows.map((h, i) => card(h, i, tab === "avoid")).join("") || `<div class="empty">${tab === "rec" ? t.none : t.noavoid}</div>`;
+  const d = x => new Date(x * 1000).toLocaleDateString(t.locale, { day: "numeric", month: "short" });
+  document.getElementById("foot").textContent = t.foot(a.sample.matches.toLocaleString(), d(a.sample.from), d(a.sample.to));
+}
+
+// ---------- in-game view ----------
+const MUTABLE = ["bounty", "water", "power", "wisdom", "lotus", "tormentor", "daynight"];
+let curPos = 0, clockBase = 0, clockAt = 0, clockSeen = null;
+let soundOn = store.get("sound", "1") === "1";
+const muted = new Set(store.get("muted", "").split(",").filter(Boolean));
+let rosh = null, torm = null, timerMatch = null;      // manual timers: clock time of the kill
+const alerted = new Set();
+const mmss = s => { const n = Math.max(0, Math.round(s)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
+const clockNow = () => { const g = last.game; return !g ? 0 : clockBase + (g.paused ? 0 : Math.min(3, (performance.now() - clockAt) / 1000)); };
+function pctl(table, v) {   // share of players this value beats (0-99), from OpenDota percentile points
+  if (!table || !table.length) return null;
+  if (v <= table[0].value) return Math.round(table[0].percentile * 100 * v / Math.max(1, table[0].value));
+  for (let i = 1; i < table.length; i++) if (v <= table[i].value) {
+    const a = table[i - 1], b = table[i];
+    return Math.round((a.percentile + (b.percentile - a.percentile) * (v - a.value) / Math.max(1, b.value - a.value)) * 100);
+  }
+  return 99;
+}
+const medianOf = table => { const m = table && table.find(p => p.percentile === 0.5); return m ? m.value : null; };
+
+function renderGame() {
+  const t = T[lang], g = last.game;
+  if (last.gsi.matchid !== timerMatch) { timerMatch = last.gsi.matchid; alerted.clear(); }
+  rosh = last.manual ? last.manual.rosh : null; torm = last.manual ? last.manual.torm : null;
+  if (g.clock !== clockSeen) { clockSeen = g.clock; clockBase = g.clock; clockAt = performance.now(); }
+  document.getElementById("gday").textContent = g.daytime ? "☀ " + t.day : "🌙 " + t.night;
+  document.getElementById("ghero").textContent = g.heroName ? `${g.heroName} · ${t.lvl} ${g.level}` : "";
+  const mins = Math.max(1, g.clock / 60), b = g.bench || {}, late = g.clock >= 600;
+  const sub = (table, v) => {
+    const med = medianOf(table); if (med == null) return "";
+    if (!late) return `<small>${esc(t.median(med))}</small>`;
+    const p = pctl(table, v); return `<small class="${p >= 50 ? "up" : "down"}">${esc(t.topP(p))}</small>`;
+  };
+  document.getElementById("tiles").innerHTML =
+    `<div class="tile"><u>GPM</u><b>${g.gpm}</b>${sub(b.gpm, g.gpm)}</div>` +
+    `<div class="tile"><u>XPM</u><b>${g.xpm}</b>${sub(b.xpm, g.xpm)}</div>` +
+    `<div class="tile"><u>LH / DN</u><b>${g.lh} / ${g.dn}</b><small>${(g.lh / mins).toFixed(1)} ${esc(t.perMin)}</small></div>` +
+    `<div class="tile"><u>K / D / A</u><b>${g.k}/${g.d}/${g.a}</b><small>${esc(g.netWorth != null ? t.nw : t.gold)} ${(g.netWorth != null ? g.netWorth : g.gold).toLocaleString()}</small></div>`;
+  document.getElementById("benchnote").textContent = medianOf(b.gpm) != null ? t.benchNote : "";
+
+  // GPM over time, with the hero's median as a dashed line
+  const h = g.history || [], med = medianOf(b.gpm), sp = document.getElementById("spark");
+  if (h.length < 2) sp.innerHTML = "";
+  else {
+    const max = Math.max(med || 0, ...h.map(p => p.gpm)) * 1.1 || 1, t0 = h[0].t, span = Math.max(1, h[h.length - 1].t - t0);
+    const y = v => (42 - v / max * 40).toFixed(1);
+    const pts = h.map(p => `${((p.t - t0) / span * 300).toFixed(1)},${y(p.gpm)}`).join(" ");
+    sp.innerHTML = (med ? `<line x1="0" x2="300" y1="${y(med)}" y2="${y(med)}" stroke="#7a5568" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>` : "") +
+      `<polyline points="${pts}" fill="none" stroke="#d5645f" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // counter items for our role
+  const want = curPos >= 4 ? "sup" : curPos >= 1 ? "core" : null;
+  const rows = (g.items || []).filter(i => !want || i.who === "any" || i.who === want).slice(0, 6);
+  const note = g.hasItems ? "" : `<div class="note">${esc(t.needRestart)}</div>`;
+  document.getElementById("items").innerHTML = !g.enemiesKnown ? `<div class="empty">${esc(t.noEnemy)}</div>`
+    : (rows.map(i => `<div class="icard"><img src="/items/${i.key}.png" alt="" onerror="this.style.visibility='hidden'">
+        <div class="name">${esc(i.name)}<span class="who">${esc(t.who[i.who])}</span></div>
+        <div class="chips">${i.reasons.map(r => `<span class="chip c">${esc(t.trait[r.trait](r.heroes.join(", ")))}</span>`).join("")}</div></div>`).join("")
+      || `<div class="empty">${esc(t.noItems)}</div>`) + note;
+  const rb = document.getElementById("roshBtn"), tb = document.getElementById("tormBtn");
+  rb.textContent = rosh != null ? t.roshOn : t.roshBtn; rb.classList.toggle("on", rosh != null);
+  tb.textContent = torm != null ? t.tormOn : t.tormBtn; tb.classList.toggle("on", torm != null);
+}
+
+// everything that is coming up, soonest first: [{id, key, t, lead, label}]
+function upcoming(c) {
+  const t = T[lang], tm = last.timings, out = [];
+  if (!tm) return out;
+  for (const ev of tm.events) {
+    if (muted.has(ev.id)) continue;
+    let at = null;
+    if (ev.at) at = ev.at.find(a => a > c - 5);
+    else at = ev.first + Math.max(0, Math.ceil((c - 5 - ev.first) / ev.every)) * ev.every;
+    if (at == null) continue;
+    if (ev.id === "tormentor" && torm != null) continue;
+    let label = t.obj[ev.id];
+    if (ev.id === "daynight") label = t.obj[(at / ev.every) % 2 === 1 ? "night" : "day"] + (at >= 900 ? " · " + t.obj.roshMove : "");
+    out.push({ id: ev.id, key: ev.id + at, t: at, lead: ev.lead, label });
+  }
+  if (rosh != null) {
+    const r = tm.roshan;
+    for (const [id, at] of [["aegis", rosh + r.aegis], ["roshMin", rosh + r.respawnMin], ["roshMax", rosh + r.respawnMax]])
+      if (at > c - 5) out.push({ id, key: id + at, t: at, lead: 30, label: t.obj[id] });
+  }
+  if (torm != null && torm + tm.tormentorRespawn > c - 5) out.push({ id: "tormRe", key: "tormRe" + torm, t: torm + tm.tormentorRespawn, lead: 60, label: t.obj.tormRe });
+  return out.sort((a, b) => a.t - b.t);
+}
+
+let audio = null;
+function beep() {
+  if (!soundOn || window.desktop) return;   // in the desktop app the small in-game window does the alerts
+  try {
+    audio = audio || new AudioContext();
+    [0, 0.18].forEach(d => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(audio.destination);
+      g.gain.setValueAtTime(0.12, audio.currentTime + d); g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + d + 0.15);
+      o.start(audio.currentTime + d); o.stop(audio.currentTime + d + 0.16);
+    });
+  } catch {}
+}
+
+function tick() {
+  if (!last.game) return;
+  const t = T[lang], c = clockNow();
+  document.getElementById("gclock").textContent = (c < 0 ? "-" : "") + mmss(Math.abs(c));
+  const list = upcoming(c);
+  const left = o => o.t - c <= 0 ? t.now : t.inT(mmss(o.t - c));
+  document.getElementById("objs").innerHTML = list.slice(0, 7).map(o =>
+    `<div class="obj ${o.t - c <= o.lead ? "soon" : ""}"><i></i><span>${esc(o.label)}<small>${mmss(o.t)}</small></span><b>${esc(left(o))}</b></div>`).join("");
+  const due = list.filter(o => o.t - c <= o.lead);
+  const el = document.getElementById("alert");
+  el.hidden = !due.length;
+  if (due.length) el.innerHTML = `${esc(due[0].label)} — ${esc(left(due[0]))}` + (due.length > 1 ? `<small>${due.slice(1).map(o => esc(o.label) + " " + esc(left(o))).join(" · ")}</small>` : "");
+  for (const o of due) if (!alerted.has(o.key)) { alerted.add(o.key); if (c > -80) beep(); }
+}
+setInterval(tick, 250);
+const mark = (k, v) => fetch("/manual", { method: "POST", body: JSON.stringify({ [k]: v }) }).catch(() => {});
+document.getElementById("roshBtn").addEventListener("click", () => mark("rosh", rosh != null ? null : Math.round(clockNow())));
+document.getElementById("tormBtn").addEventListener("click", () => mark("torm", torm != null ? null : Math.round(clockNow())));
+document.getElementById("sound").addEventListener("click", () => { soundOn = !soundOn; store.set("sound", soundOn ? "1" : "0"); if (soundOn) beep(); render(); });
+document.getElementById("mutes").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  muted.has(b.dataset.id) ? muted.delete(b.dataset.id) : muted.add(b.dataset.id);
+  store.set("muted", [...muted].join(",")); render();
+});
+
+document.getElementById("seg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { posPref = b.dataset.pos; render(); } });
+document.getElementById("tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { tab = b.dataset.tab; render(); } });
+document.querySelector(".board").addEventListener("click", e => { const b = e.target.closest("button[data-side]"); if (b) { sidePref = b.dataset.side; render(); } });
+document.getElementById("lang").addEventListener("click", () => { lang = lang === "th" ? "en" : "th"; store.set("lang", lang); render(); });
+
+// click a suggestion: copy the hero name (the player still picks and locks in the game themself)
+let toastTimer = null;
+document.getElementById("list").addEventListener("click", e => {
+  const c = e.target.closest(".card"); if (!c) return;
+  const name = c.dataset.name;
+  if (window.desktop) window.desktop.copy(name); else if (navigator.clipboard) navigator.clipboard.writeText(name).catch(() => {});
+  const el = document.getElementById("toast");
+  el.textContent = T[lang].copied(name); el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 2500);
+});
+
+// settings: compact mode, opacity, window buttons
+let compact = store.get("mode", "full") === "compact";
+const applyMode = () => { document.body.classList.toggle("compact", compact); if (window.desktop) window.desktop.setMode(compact ? "compact" : "full"); store.set("mode", compact ? "compact" : "full"); };
+document.getElementById("mode").addEventListener("click", () => { compact = !compact; applyMode(); });
+document.getElementById("gear").addEventListener("click", () => { const el = document.getElementById("settings"); el.hidden = !el.hidden; });
+const op = document.getElementById("opacity");
+op.value = store.get("opacity", "100");
+const applyOpacity = () => { document.getElementById("opv").textContent = op.value + "%"; if (window.desktop) window.desktop.setOpacity(op.value / 100); store.set("opacity", op.value); };
+op.addEventListener("input", applyOpacity);
+if (window.desktop) {
+  document.body.classList.add("desktop");
+  document.getElementById("min").addEventListener("click", () => window.desktop.minimize());
+  document.getElementById("close").addEventListener("click", () => window.desktop.close());
+  applyOpacity();
+}
+applyMode();
+
+const pin = document.getElementById("pin");
+if (window.desktop) {
+  pin.style.display = "block";
+  let on = store.get("pin", "1") === "1";
+  const apply = () => { pin.classList.toggle("on", on); window.desktop.setPin(on); store.set("pin", on ? "1" : "0"); };
+  pin.addEventListener("click", () => { on = !on; apply(); });
+  apply();
+}
+
+let setupState = null;
+if (window.desktop && window.desktop.gsiSetup) window.desktop.gsiSetup().then(v => { setupState = v; render(); });
+render();
+const es = new EventSource("/events");
+es.onopen = () => { connected = true; render(); };
+es.onmessage = e => { connected = true; last = JSON.parse(e.data); render(); };
+es.onerror = () => { connected = false; render(); };
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-exe/
+*.rar
+*.zip
+# personal: test log with Steam ID, own draft screenshots
+gsi-log.jsonl
+samples/
+.claude/
+# caches
+data/bench-*.json

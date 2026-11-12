@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Draft Coach HUD</title>
+<style>
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:transparent; overflow:hidden; user-select:none; }
+  body { font:11px/1.2 "Segoe UI", "Leelawadee UI", system-ui, sans-serif; color:#f4eaec; padding:4px; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+  .strip { display:flex; align-items:center; gap:9px; height:22px; padding:0 4px 0 2px; border-radius:6px; background:rgba(5,5,15,.55); border:1px solid rgba(213,100,95,.35); white-space:nowrap; }
+  .grip { -webkit-app-region:drag; width:12px; align-self:stretch; display:grid; place-items:center; color:#a98c98; font-size:9px; cursor:move; }
+  .s u { text-decoration:none; color:#d5645f; font-size:9px; font-weight:700; margin-right:3px; letter-spacing:.03em; }
+  .s b { font-variant-numeric:tabular-nums; font-size:11.5px; }
+  .more { background:none; border:0; color:#a98c98; font-size:11px; padding:0 2px; cursor:pointer; }
+  .more:hover { color:#f4eaec; }
+  .pops { display:flex; flex-direction:column; gap:3px; }
+  .pop { display:flex; align-items:center; gap:7px; padding:3px 9px 3px 3px; border-radius:7px; background:rgba(46,31,47,.6); border:1px solid rgba(213,100,95,.55); animation:in .25s ease-out; }
+  .pop img, .pop i { width:36px; height:26px; border-radius:4px; object-fit:cover; flex:none; }
+  .pop i { display:grid; place-items:center; font-style:normal; font-size:16px; background:rgba(5,5,15,.5); }
+  .pop span { font-size:11.5px; font-weight:600; }
+  .pop b { font-size:13px; font-variant-numeric:tabular-nums; color:#d5645f; margin-left:2px; }
+  .pop.now { background:rgba(147,57,61,.7); } .pop.now b { color:#fff; }
+  @keyframes in { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+</style>
+</head>
+<body>
+<div class="strip" id="strip">
+  <span class="grip">⋮⋮</span>
+  <span class="s"><u>GPM</u><b id="gpm">0</b></span>
+  <span class="s"><u>XPM</u><b id="xpm">0</b></span>
+  <span class="s"><u>LH</u><b id="lh">0</b></span>
+  <span class="s"><u>DN</u><b id="dn">0</b></span>
+  <span class="s"><u>KDA</u><b id="kda">0/0/0</b></span>
+  <button class="more" id="more" title="Draft Coach">☰</button>
+</div>
+<div class="pops" id="pops"></div>
+<script>
+const L = {
+  th: { bounty: "Bounty rune", water: "Water rune", power: "Power rune", wisdom: "Shrine of Wisdom", lotus: "Lotus", tormentor: "Tormentor เกิด", night: "เข้ากลางคืน", day: "เข้ากลางวัน",
+    aegis: "Aegis หมดอายุ", roshMin: "Roshan อาจเกิดแล้ว", roshMax: "Roshan เกิดแน่นอน", tormRe: "Tormentor เกิดใหม่", now: "ตอนนี้!" },
+  en: { bounty: "Bounty runes", water: "Water runes", power: "Power rune", wisdom: "Shrine of Wisdom", lotus: "Lotus", tormentor: "Tormentor spawns", night: "Night falls", day: "Day breaks",
+    aegis: "Aegis expires", roshMin: "Roshan may be back", roshMax: "Roshan is up", tormRe: "Tormentor respawns", now: "now!" },
+};
+const ICON = { bounty: "bottle_bounty", water: "bottle_water", power: "bottle_doubledamage", wisdom: "tome_of_knowledge", lotus: "famango", tormentor: "aghanims_shard", tormRe: "aghanims_shard",
+  aegis: "aegis", roshMin: "roshans_banner", roshMax: "roshans_banner" };
+const EMOJI = { night: "🌙", day: "☀️" };
+const ls = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+const mmss = s => { const n = Math.max(0, Math.round(s)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
+let last = {}, clockBase = 0, clockAt = 0, clockSeen = null, live = null, matchSeen = null;
+const alerted = new Set();
+const clockNow = () => clockBase + (last.game.paused ? 0 : Math.min(3, (performance.now() - clockAt) / 1000));
+
+function upcoming(c) {
+  const tm = last.timings, out = [], muted = new Set(ls("muted", "").split(","));
+  const m = last.manual || {};
+  for (const ev of tm.events) {
+    if (muted.has(ev.id) || (ev.id === "tormentor" && m.torm != null)) continue;
+    const at = ev.at ? ev.at.find(a => a > c - 5) : ev.first + Math.max(0, Math.ceil((c - 5 - ev.first) / ev.every)) * ev.every;
+    if (at == null) continue;
+    out.push({ id: ev.id === "daynight" ? ((at / ev.every) % 2 === 1 ? "night" : "day") : ev.id, t: at, lead: ev.lead });
+  }
+  if (m.rosh != null) for (const [id, at] of [["aegis", m.rosh + tm.roshan.aegis], ["roshMin", m.rosh + tm.roshan.respawnMin], ["roshMax", m.rosh + tm.roshan.respawnMax]])
+    if (at > c - 5) out.push({ id, t: at, lead: 30 });
+  if (m.torm != null && m.torm + tm.tormentorRespawn > c - 5) out.push({ id: "tormRe", t: m.torm + tm.tormentorRespawn, lead: 60 });
+  return out.filter(o => o.t - c <= o.lead).sort((a, b) => a.t - b.t);
+}
+
+let audio = null;
+function beep() {
+  if (ls("sound", "1") !== "1") return;
+  try {
+    audio = audio || new AudioContext();
+    [0, 0.18].forEach(d => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(audio.destination);
+      g.gain.setValueAtTime(0.1, audio.currentTime + d); g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + d + 0.15);
+      o.start(audio.currentTime + d); o.stop(audio.currentTime + d + 0.16);
+    });
+  } catch {}
+}
+
+let popKey = "";
+function tick() {
+  const g = last.game;
+  if (!g || !last.timings) return;
+  const t = L[ls("lang", "th") === "en" ? "en" : "th"], c = clockNow();
+  const due = upcoming(c).slice(0, 4);
+  const pops = document.getElementById("pops");
+  const key = due.map(o => o.id + o.t).join("|");
+  if (key !== popKey) {   // rebuild only when the set changes, so the fade-in does not replay every tick
+    popKey = key;
+    pops.innerHTML = due.map(o => `<div class="pop">${ICON[o.id] ? `<img src="/items/${ICON[o.id]}.png" alt="">` : `<i>${EMOJI[o.id] || "•"}</i>`}<span>${t[o.id]}</span><b></b></div>`).join("");
+  }
+  due.forEach((o, i) => {
+    const el = pops.children[i], now = o.t - c <= 0;
+    el.classList.toggle("now", now);
+    el.lastElementChild.textContent = now ? t.now : mmss(o.t - c);
+    if (!alerted.has(o.id + o.t)) { alerted.add(o.id + o.t); if (c > -80) beep(); }
+  });
+}
+setInterval(tick, 250);
+
+function onData() {
+  const g = last.game, isLive = !!g;
+  if (isLive !== live) { live = isLive; if (window.desktop && window.desktop.hudLive) window.desktop.hudLive(isLive); }
+  if (!g) return;
+  if (last.gsi.matchid !== matchSeen) { matchSeen = last.gsi.matchid; alerted.clear(); }
+  if (g.clock !== clockSeen) { clockSeen = g.clock; clockBase = g.clock; clockAt = performance.now(); }
+  document.getElementById("gpm").textContent = g.gpm;
+  document.getElementById("xpm").textContent = g.xpm;
+  document.getElementById("lh").textContent = g.lh;
+  document.getElementById("dn").textContent = g.dn;
+  document.getElementById("kda").textContent = `${g.k}/${g.d}/${g.a}`;
+  tick();
+}
+const es = new EventSource("/events");
+es.onmessage = e => { last = JSON.parse(e.data); onData(); };
+es.onerror = () => { last = {}; onData(); };
+
+// the window is click-through except over the strip
+if (window.desktop && window.desktop.hudMouse) {
+  const strip = document.getElementById("strip");
+  strip.addEventListener("mouseenter", () => window.desktop.hudMouse(true));
+  strip.addEventListener("mouseleave", () => window.desktop.hudMouse(false));
+  document.getElementById("more").addEventListener("click", () => window.desktop.hudToggleMain());
+}
+</script>
+</body>
+</html>

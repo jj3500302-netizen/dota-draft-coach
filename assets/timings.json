@@ -1,0 +1,15 @@
+{
+  "patch": "7.41f",
+  "note": "Clock times in seconds. first+every = repeating, at = fixed times, lead = seconds of warning before it happens. Edit when a patch changes them.",
+  "events": [
+    { "id": "bounty", "first": 0, "every": 240, "lead": 30 },
+    { "id": "water", "at": [120, 240], "lead": 20 },
+    { "id": "power", "first": 360, "every": 120, "lead": 25 },
+    { "id": "wisdom", "first": 420, "every": 420, "lead": 40 },
+    { "id": "lotus", "first": 180, "every": 180, "lead": 25 },
+    { "id": "tormentor", "at": [1200], "lead": 60 },
+    { "id": "daynight", "first": 300, "every": 300, "lead": 20 }
+  ],
+  "roshan": { "respawnMin": 480, "respawnMax": 660, "aegis": 300 },
+  "tormentorRespawn": 600
+}

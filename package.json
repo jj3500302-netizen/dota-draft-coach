@@ -1,0 +1,59 @@
+{
+    "name":  "draft-coach",
+    "version":  "1.0.0",
+    "description":  "Dota 2 draft coach",
+    "main":  "main.js",
+    "scripts":  {
+                    "start":  "electron .",
+                    "server":  "node server.js",
+                    "collect":  "node collect.js"
+                },
+    "keywords":  [
+
+                 ],
+    "author":  "Draft Coach",
+    "license":  "ISC",
+    "type":  "commonjs",
+    "dependencies":  {
+                         "sharp":  "^0.35.5"
+                     },
+    "devDependencies":  {
+                            "electron":  "^45.3.1"
+                        },
+    "productName":  "Draft Coach",
+    "build":  {
+                  "appId":  "local.draftcoach",
+                  "productName":  "Draft Coach",
+                  "asar":  false,
+                  "directories":  {
+                                      "output":  "dist-exe"
+                                  },
+                  "files":  [
+                                "**/*",
+                                "!samples{,/**}",
+                                "!dist{,/**}",
+                                "!dist-exe{,/**}",
+                                "!gsi-log.jsonl",
+                                "!gsi-logger.js",
+                                "!calibrate.js",
+                                "!sim-game.js",
+                                "!data/bench-*.json",
+                                "!.claude{,/**}",
+                                "!*.rar",
+                                "!*.zip"
+                            ],
+                  "win":  {
+                              "target":  [
+                                             {
+                                                 "target":  "portable",
+                                                 "arch":  [
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ]
+                          },
+                  "portable":  {
+                                   "artifactName":  "DraftCoach.exe"
+                               }
+              }
+}
