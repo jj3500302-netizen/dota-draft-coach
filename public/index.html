@@ -187,7 +187,7 @@
   <div><span data-i="alertsFor"></span><div class="mutes" id="mutes"></div></div>
 </div>
 <div class="toast" id="toast" hidden></div>
-<nav class="nav" id="nav"><button data-v="draft" class="on"></button><button data-v="report"></button><button data-v="players"></button></nav>
+<nav class="nav" id="nav"><button data-v="draft" class="on"></button><button data-v="report"></button><button data-v="players"></button><button data-v="data"></button></nav>
 <main>
  <div class="view" id="gameview" hidden>
   <div class="alert" id="alert" hidden></div>
@@ -240,6 +240,7 @@
  </div>
  <div class="view" id="reportview" hidden></div>
  <div class="view" id="playersview" hidden></div>
+ <div class="view" id="dataview" hidden></div>
 </main>
 <script>
 let view = "draft";
@@ -615,6 +616,15 @@ es.onerror = () => { connected = false; render(); };
   .kv div { background:var(--panel2); border-radius:8px; padding:6px 8px; } .kv u { text-decoration:none; display:block; font-size:10.5px; color:var(--muted); } .kv b { font-size:15px; }
   .search { width:100%; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:6px 8px; font:inherit; }
   .back { background:none; border:0; color:var(--muted); padding:0; font-size:12px; align-self:flex-start; } .back:hover { color:var(--text); }
+  .dstat { width:10px; height:10px; border-radius:50%; flex:none; background:var(--bad); } .dstat.ok { background:var(--good); box-shadow:0 0 0 3px #58c26a33; }
+  .dstat.run { background:var(--accent); animation:pulse 1s infinite alternate; } @keyframes pulse { to { opacity:.3; } }
+  .dbars { display:flex; align-items:flex-end; gap:4px; height:84px; }
+  .dbars div { flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:2px; min-width:0; }
+  .dbars i { display:block; width:100%; max-width:22px; background:var(--accent); border-radius:3px 3px 0 0; }
+  .dbars small { font-size:9px; color:var(--muted); white-space:nowrap; overflow:hidden; max-width:100%; }
+  .dlog { display:flex; flex-direction:column; font-size:12px; }
+  .dlog div { display:grid; grid-template-columns:auto 1fr auto; gap:8px; padding:4px 0; border-top:1px solid var(--line); } .dlog div:first-child { border-top:0; }
+  .dlog b { font-weight:600; font-variant-numeric:tabular-nums; } .dlog small { color:var(--muted); } .dlog .bad span { color:var(--bad); }
   #gadv { width:100%; height:60px; display:block; }
 </style>
 <script>
@@ -670,6 +680,21 @@ const R = {
     streak: "Last 5", mainHero: (h, n) => `${h} in ${n} of 20 games`,
   },
 };
+R.th.tabs.data = "ข้อมูล"; R.en.tabs.data = "Data";
+R.th.data = { title: "ข้อมูลสถิติฮีโร่", now: "อัปเดตตอนนี้", running: n => `กำลังอัปเดต… ได้เกมใหม่ ${n.toLocaleString()} เกม`,
+  today: t => `อัปเดตแล้ววันนี้ ${t}`, yday: t => `อัปเดตล่าสุดเมื่อวาน ${t}`, days: d => `อัปเดตล่าสุด ${d} วันที่แล้ว`, never: "ยังไม่เคยอัปเดตอัตโนมัติ",
+  next: "รอบถัดไป", soon: "ภายใน 10 นาที", inH: h => `อีกราว ${h} ชม.`, busy: "จะอัปเดตหลังจบดราฟ/เกม",
+  total: "เกมที่ใช้คำนวณ", range: "ช่วงวันที่", keep: d => `เก็บ ${d} วันล่าสุด`, perDay: "เกมใหม่ต่อการอัปเดต", hist: "ประวัติการอัปเดต",
+  auto: "อัตโนมัติ", manual: "กดเอง", added: n => `+${n.toLocaleString()} เกม`, removed: n => `ลบเกมเก่า ${n.toLocaleString()}`, fail: e => `ล้มเหลว: ${e}`,
+  gap: "เกมใหม่เยอะเกินรอบเดียว ดึงเฉพาะล่าสุด", limit: "ถึงโควต้า OpenDota ของวันนี้",
+  how: "ทุกวันแอปจะดึงเกมแรงค์ Legend ขึ้นไปล่าสุดจาก OpenDota มาเพิ่ม และลบเกมที่เก่ากว่า 30 วัน คำแนะนำฮีโร่จะใช้ข้อมูลใหม่ทันทีหลังอัปเดต (ถ้าอยู่ในดราฟ/เกมจะรอให้จบก่อน)", none: "ยังไม่มีประวัติ" };
+R.en.data = { title: "Hero stats data", now: "Update now", running: n => `Updating… ${n.toLocaleString()} new matches so far`,
+  today: t => `Updated today at ${t}`, yday: t => `Last updated yesterday at ${t}`, days: d => `Last updated ${d} days ago`, never: "Not updated automatically yet",
+  next: "Next update", soon: "within 10 minutes", inH: h => `in about ${h} h`, busy: "after your draft/game ends",
+  total: "Matches used", range: "Dates", keep: d => `keeps the last ${d} days`, perDay: "New matches per update", hist: "Update history",
+  auto: "auto", manual: "manual", added: n => `+${n.toLocaleString()} matches`, removed: n => `${n.toLocaleString()} old removed`, fail: e => `failed: ${e}`,
+  gap: "more new matches than one update fetches; took the newest", limit: "hit today's OpenDota limit",
+  how: "Every day the app pulls the newest Legend+ ranked matches from OpenDota and drops matches older than 30 days. Hero suggestions use the new data right after an update (during a draft or game it waits until it ends).", none: "No updates yet" };
 const mm = s => (s < 0 ? "-" : "") + Math.floor(Math.abs(s) / 60) + ":" + String(Math.abs(Math.round(s)) % 60).padStart(2, "0");
 const RANKS = ["", "Herald", "Guardian", "Crusader", "Archon", "Legend", "Ancient", "Divine", "Immortal"];
 const rankName = r => r ? RANKS[Math.floor(r / 10)] + (r % 10 && r < 80 ? " " + (r % 10) : "") : "–";
@@ -720,12 +745,14 @@ async function openPlayer(id) {
   catch { if (playerId === id) { playerData = { error: true }; renderExtra(); } }
 }
 
-let extraHtml = { report: "", players: "" };
+let extraHtml = { report: "", players: "", data: "" };
 function renderExtra() {
   const r = R[lang];
   document.querySelectorAll("#nav button").forEach(b => { b.textContent = r.tabs[b.dataset.v]; b.classList.toggle("on", b.dataset.v === view); b.classList.toggle("dot", b.dataset.v === "report" && newReport && view !== "report"); });
-  const rv = document.getElementById("reportview"), pv = document.getElementById("playersview");
-  rv.hidden = view !== "report"; pv.hidden = view !== "players";
+  const rv = document.getElementById("reportview"), pv = document.getElementById("playersview"), dv = document.getElementById("dataview");
+  rv.hidden = view !== "report"; pv.hidden = view !== "players"; dv.hidden = view !== "data";
+  const db = document.querySelector('#nav button[data-v="data"]'); if (last.data && last.data.running) db.textContent += " ⟳";
+  if (view === "data") { const h = dataHtml(r); if (h !== extraHtml.data) { extraHtml.data = h; dv.innerHTML = h; } }
   // only touch the DOM when something changed (keeps the dropdown and search box usable)
   if (view === "report") { const h = reportHtml(r); if (h !== extraHtml.report) { extraHtml.report = h; rv.innerHTML = h; } }
   if (view === "players") { const h = playersHtml(r); if (h !== extraHtml.players) { extraHtml.players = h; pv.innerHTML = h; } }
@@ -771,6 +798,38 @@ function reportHtml(r) {
   return h;
 }
 
+function dataHtml(r) {
+  const d = last.data, t = r.data;
+  if (!d) return `<div class="empty">${esc(r.loading)}</div>`;
+  const loc = lang === "th" ? "th-TH" : "en-GB";
+  const hm = ms => new Date(ms).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" });
+  const day = ms => new Date(ms).toLocaleDateString(loc, { day: "numeric", month: "short" });
+  const dayDiff = ms => Math.round((new Date().setHours(0, 0, 0, 0) - new Date(ms).setHours(0, 0, 0, 0)) / 86400e3);
+  let status;
+  if (d.running) status = t.running(d.running.added);
+  else if (!d.lastOk) status = t.never;
+  else { const k = dayDiff(d.lastOk); status = k === 0 ? t.today(hm(d.lastOk)) : k === 1 ? t.yday(hm(d.lastOk)) : t.days(k); }
+  const fresh = d.lastOk && Date.now() - d.lastOk < 26 * 3600e3;
+  const wait = d.nextAt - Date.now();
+  const next = last.game || last.capturing ? t.busy : wait <= 600e3 ? t.soon : t.inH(Math.max(1, Math.round(wait / 3600e3)));
+  let h = `<section class="panel"><div class="label">${esc(t.title)}</div>
+    <div class="row2"><span class="dstat ${d.running ? "run" : fresh ? "ok" : "old"}"></span><div style="flex:1"><div class="name">${esc(status)}</div>
+    ${d.running ? "" : `<div class="meta">${esc(t.next)}: ${esc(next)}</div>`}</div>
+    <button class="tbtn" id="dupd" ${d.running ? "disabled" : ""}>${esc(t.now)}</button></div>
+    <div class="kv"><div><u>${esc(t.total)}</u><b>${d.total.toLocaleString()}</b></div>
+    <div style="grid-column:span 2"><u>${esc(t.range)} · ${esc(t.keep(d.keepDays))}</u><b>${d.oldestT ? day(d.oldestT * 1000) + " – " + day(d.newestT * 1000) : "–"}</b></div></div></section>`;
+  const runs = d.runs.filter(x => x.ok);
+  if (runs.length) {
+    const max = Math.max(1, ...runs.map(x => x.added));
+    h += `<section class="panel"><div class="label">${esc(t.perDay)}</div><div class="dbars">${runs.map(x =>
+      `<div title="${esc(day(x.at) + " " + hm(x.at) + " · " + t.added(x.added))}"><i style="height:${Math.max(3, x.added / max * 100)}%"></i><small>${esc(day(x.at))}</small></div>`).join("")}</div></section>`;
+  }
+  h += `<section class="panel"><div class="label">${esc(t.hist)}</div>${d.runs.length ? `<div class="dlog">${d.runs.slice().reverse().map(x =>
+    `<div class="${x.ok ? "" : "bad"}"><b>${esc(day(x.at))} ${esc(hm(x.at))}</b><span>${x.ok ? esc(t.added(x.added)) + (x.removed ? " · " + esc(t.removed(x.removed)) : "") : esc(t.fail(x.error || "?"))}${x.gap ? " · " + esc(t.gap) : ""}${x.note === "daily-limit" ? " · " + esc(t.limit) : ""}</span><small>${esc(t[x.reason] || x.reason)}</small></div>`).join("")}</div>` : `<div class="meta">${esc(t.none)}</div>`}
+    <div class="note">${esc(t.how)}</div></section>`;
+  return h;
+}
+
 function playersHtml(r) {
   if (!meState.accountId) return `<div class="empty">${esc(r.noAcc)}</div>`;
   if (playerId) {
@@ -799,6 +858,7 @@ function playersHtml(r) {
 
 document.querySelector("main").addEventListener("click", e => {
   const p = e.target.closest(".pl[data-acc]"); if (p) return openPlayer(+p.dataset.acc);
+  if (e.target.closest("#dupd")) { e.target.closest("#dupd").disabled = true; fetch("/api/update", { method: "POST" }).catch(() => {}); return; }
   if (e.target.closest("#pback")) { playerId = null; playerData = null; loadPlayers(); renderExtra(); }
 });
 document.querySelector("main").addEventListener("change", e => { if (e.target.id === "msel") { reportId = e.target.value; loadReport(); } });

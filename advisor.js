@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const heroesMeta = require("./assets/heroes.json");
 
-const MATCHES = path.join(__dirname, "data", "matches.jsonl");
+const MATCHES = path.join(require("./paths").DATA, "matches.jsonl");
 const SHRINK = 60; // games of "prior" pulling a pair toward its expected winrate
 
 const heroes = Object.values(heroesMeta).map((h) => ({

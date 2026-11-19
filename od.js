@@ -4,7 +4,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const BASE = "https://api.opendota.com/api";
-const DIR = path.join(__dirname, "data", "od-cache");
+const DIR = path.join(require("./paths").DATA, "od-cache");
 const GAP_MS = 1100;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

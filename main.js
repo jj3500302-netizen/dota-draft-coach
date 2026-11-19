@@ -30,6 +30,15 @@ else {
 
   app.whenReady().then(async () => {
     const gsiSetup = require("./gsi-install").installGsi();   // first run: tell Dota to report to this app
+    if (app.isPackaged) {
+      // the exe unpacks to a new temp folder every launch: keep matches, reports and caches in AppData instead
+      const fs = require("fs");
+      const dir = path.join(app.getPath("userData"), "data");
+      fs.mkdirSync(dir, { recursive: true });
+      const seed = path.join(__dirname, "data", "matches.jsonl"), mine = path.join(dir, "matches.jsonl");
+      if (!fs.existsSync(mine) && fs.existsSync(seed)) fs.copyFileSync(seed, mine);
+      process.env.DRAFTCOACH_DATA = dir;
+    }
     const { ready, PORT } = require("./server");
     await ready;
     ipcMain.handle("gsi-setup", () => gsiSetup);

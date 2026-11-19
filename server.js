@@ -15,6 +15,8 @@ const advisor = require("./advisor");
 const { counterItems } = require("./items");
 const timings = require("./assets/timings.json");
 const insights = require("./insights");
+const updater = require("./updater");
+const { DATA } = require("./paths");
 
 const PORT = +process.env.DRAFTCOACH_PORT || 3007;   // Dota's GSI config posts to 3007; another port is only for testing
 const TOKEN = "draftcoach-local";
@@ -60,7 +62,7 @@ function payload() {
     const enemies = current && foe ? current[foe].filter((s) => s.state === "picked").map((s) => ({ key: s.key, name: s.hero })) : [];
     live = { ...game, history, bench, mine: insights.baselineAt(game.heroId, game.clock), enemiesKnown: enemies.length, items: counterItems(enemies, game.owned) };
   }
-  return JSON.stringify({ gsi, draft: current, roles, advice, game: live, timings, manual, me: insights.state(), capturing: ALWAYS || !!FILE || DRAFT_STATES.has(gsi.state) });
+  return JSON.stringify({ gsi, draft: current, roles, advice, game: live, timings, manual, me: insights.state(), data: updater.state(), capturing: ALWAYS || !!FILE || DRAFT_STATES.has(gsi.state) });
 }
 
 function broadcast() {
@@ -79,7 +81,7 @@ function logDraft(d) {
 
 // percentile tables for our hero (end-of-game numbers from OpenDota), cached on disk
 async function loadBench(heroId) {
-  const file = path.join(__dirname, "data", `bench-${heroId}.json`);
+  const file = path.join(DATA, `bench-${heroId}.json`);
   try {
     const st = fs.statSync(file);
     if (Date.now() - st.mtimeMs < 7 * 864e5) return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -138,6 +140,7 @@ async function tick() {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.method === "POST" && req.url === "/api/update") return api(req, res);
   if (req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));
@@ -197,6 +200,7 @@ async function api(req, res) {
   try {
     if (parts[1] === "matches") return send(200, await insights.myMatches());
     if (parts[1] === "report" && /^\d+$/.test(parts[2] || "")) return send(200, await insights.report(parts[2]));
+    if (parts[1] === "update" && req.method === "POST") { updater.run("manual"); return send(200, { ok: true }); }
     if (parts[1] === "players") return send(200, insights.metList());
     if (parts[1] === "player" && /^\d+$/.test(parts[2] || "")) return send(200, await insights.player(parts[2]));
     send(404, { error: "not found" });
@@ -211,13 +215,23 @@ const ready = new Promise((resolve) => {
   });
   server.listen(PORT, "127.0.0.1", async () => {
     console.log(`Hero stats: ${advisor.build().total} matches`);
-    // pick up new matches from collect.js every 10 minutes
-    setInterval(() => {
+    // reload the stats when matches.jsonl changes (daily update, or collect.js run by hand),
+    // but not mid-draft or mid-game, where a 1-2 s rebuild would stall the screen reading
+    let statsMtime = 0;
+    try { statsMtime = fs.statSync(path.join(DATA, "matches.jsonl")).mtimeMs; } catch {}
+    const busy = () => DRAFT_STATES.has(gsi.state) || GAME_STATES.has(gsi.state);
+    const reload = () => {
+      let m = 0; try { m = fs.statSync(path.join(DATA, "matches.jsonl")).mtimeMs; } catch {}
+      if (m === statsMtime || busy()) return;
+      statsMtime = m;
       const n = advisor.build().total;
       adviceCache = null;
-      if (current) broadcast();
+      broadcast();
       console.log(`Hero stats reloaded: ${n} matches`);
-    }, 600000);
+    };
+    setInterval(reload, 60000);
+    updater.onChange(() => { if (!updater.state().running) reload(); broadcast(); });
+    updater.schedule(busy);
     console.log("Loading hero images...");
     await loadRefs().then((r) => readDraft(Buffer.alloc(0), { refs: r }).catch(() => {}));
     console.log(`Draft Coach ready: http://127.0.0.1:${PORT}/`);

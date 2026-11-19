@@ -6,7 +6,7 @@ const path = require("path");
 const od = require("./od");
 const advisor = require("./advisor");
 
-const DATA = path.join(__dirname, "data");
+const { DATA } = require("./paths");
 const REPORTS = path.join(DATA, "reports");
 const load = (f, d) => { try { return JSON.parse(fs.readFileSync(path.join(DATA, f), "utf8")); } catch { return d; } };
 const save = (f, v) => { try { fs.mkdirSync(path.dirname(path.join(DATA, f)), { recursive: true }); fs.writeFileSync(path.join(DATA, f), JSON.stringify(v)); } catch {} };
