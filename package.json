@@ -47,7 +47,8 @@
       "!data/parse-requested.json",
       "!data/collect-state.json",
       "!data/update-log.json",
-      "!data/*.tmp"
+      "!data/*.tmp",
+      "!data/mmr.json"
     ],
     "win": {
       "target": [

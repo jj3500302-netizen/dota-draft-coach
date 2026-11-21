@@ -123,6 +123,7 @@ function queueReport(matchId) {
   if (!/^\d+$/.test(id) || reportJobs.has(id)) return;
   reportJobs.set(id, { status: "waiting", since: Date.now() });
   latest = { matchId: id, at: Date.now() };
+  setTimeout(() => bumpProfile(), 5 * 60e3);
   save("latest-report.json", latest);
   onChange("report");
   pollReport(id);
@@ -338,11 +339,65 @@ async function myMatches() {
     won: (m.player_slot < 128) === m.radiant_win, kda: [m.kills, m.deaths, m.assists] }));
 }
 
+// ---------- 5. profile + MMR tracker ----------
+// Valve does not publish MMR. You type your real MMR once (from your Dota profile); after that every ranked
+// game adds or removes perGame. Without it we start from OpenDota's own estimate (computed_mmr).
+let profileRev = 0;
+const bumpProfile = () => { profileRev++; onChange("profile"); };
+let mmrCfg = load("mmr.json", { anchor: null, at: null, perGame: 25 });
+function setMmr({ mmr, perGame }) {
+  if (mmr != null && +mmr >= 0 && +mmr < 20000) mmrCfg.anchor = Math.round(+mmr), mmrCfg.at = Date.now();
+  if (mmr === null) mmrCfg.anchor = null, mmrCfg.at = null;
+  if (perGame != null && +perGame >= 1 && +perGame <= 60) mmrCfg.perGame = Math.round(+perGame);
+  save("mmr.json", mmrCfg);
+  bumpProfile();
+}
+async function profile() {
+  if (!me.accountId) return null;
+  const id = me.accountId;
+  const [p, ranked, wl30, wlAll30] = await Promise.all([
+    od.get(`/players/${id}`, { ttl: 30 * 60e3 }),
+    od.get(`/players/${id}/matches?lobby_type=7&limit=100&project=start_time&project=duration&project=radiant_win&project=player_slot&project=hero_id`, { ttl: 3 * 60e3 }),
+    od.get(`/players/${id}/wl?lobby_type=7&date=30`, { ttl: 3 * 60e3 }),
+    od.get(`/players/${id}/wl?date=30`, { ttl: 3 * 60e3 }),
+  ]);
+  const games = (ranked || []).filter((m) => m.radiant_win != null)
+    .map((m) => ({ t: m.start_time + (m.duration || 0), won: (m.player_slot < 128) === m.radiant_win, hero: heroOf(m.hero_id).key }))
+    .sort((a, b) => a.t - b.t);
+  const step = mmrCfg.perGame;
+  // the anchor is your MMR at the moment you typed it: games that ended after that add/remove from it
+  let anchor, anchorT, source;
+  if (mmrCfg.anchor != null) { anchor = mmrCfg.anchor; anchorT = mmrCfg.at / 1000; source = "you"; }
+  else if (p && p.computed_mmr) { anchor = Math.round(p.computed_mmr); anchorT = Date.now() / 1000; source = "opendota"; }
+  const series = [];
+  if (anchor != null) {
+    const after = games.filter((g) => g.t > anchorT), before = games.filter((g) => g.t <= anchorT);
+    let v = anchor;
+    for (const g of after) { v += g.won ? step : -step; series.push({ t: g.t, won: g.won, hero: g.hero, mmr: v }); }
+    let b = anchor;
+    for (const g of before.slice().reverse()) { series.unshift({ t: g.t, won: g.won, hero: g.hero, mmr: b }); b -= g.won ? step : -step; }
+    series.startMmr = b;
+  }
+  const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
+  const today = games.filter((g) => g.t >= midnight);
+  let streak = 0;
+  for (let i = games.length - 1; i >= 0; i--) { const w = games[i].won; if (streak === 0) streak = w ? 1 : -1; else if ((streak > 0) === w) streak += w ? 1 : -1; else break; }
+  return {
+    accountId: id, name: p && p.profile ? p.profile.personaname : null, avatar: p && p.profile ? p.profile.avatarmedium : null,
+    rankTier: p ? p.rank_tier : null, leaderboard: p ? p.leaderboard_rank : null,
+    mmr: anchor == null ? null : (series.length ? series[series.length - 1].mmr : anchor), source, perGame: step,
+    odMmr: p && p.computed_mmr ? Math.round(p.computed_mmr) : null,
+    today: { w: today.filter((g) => g.won).length, l: today.filter((g) => !g.won).length, delta: today.reduce((s, g) => s + (g.won ? step : -step), 0) },
+    wr30: wl30 ? { w: wl30.win, l: wl30.lose } : null, wrAll30: wlAll30 ? { w: wlAll30.win, l: wlAll30.lose } : null,
+    streak, series: series.slice(-40), start: series.startMmr,
+  };
+}
+
 function state() {
   const jobs = {};
   for (const [id, j] of reportJobs) jobs[id] = j.status;
-  return { accountId: me.accountId, poolLoaded: !!pool, latest, jobs };
+  return { accountId: me.accountId, poolLoaded: !!pool, latest, jobs, profileRev };
 }
 
 if (me.accountId) { refreshPool(); seedPeers(); }
-module.exports = { setMe, getPool: () => pool, baseline, baselineAt, queueReport, report, player, metList, myMatches, state, onChange: (f) => (onChange = f) };
+module.exports = { setMe, getPool: () => pool, baseline, baselineAt, queueReport, report, player, metList, myMatches, state, profile, setMmr, onChange: (f) => (onChange = f) };

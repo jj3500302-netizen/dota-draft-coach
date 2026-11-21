@@ -17,3 +17,4 @@ data/latest-report.json
 data/parse-requested.json
 data/update-log.json
 data/*.tmp
+data/mmr.json

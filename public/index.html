@@ -181,6 +181,7 @@
   <span class="pill" id="status"><i></i><span>กำลังเชื่อมต่อ</span></span>
   <span class="tools"><button class="tbtn ic" id="gear">⚙</button><button class="tbtn ic" id="mode">◧</button><button class="tbtn ic dk" id="min">—</button><button class="tbtn ic dk" id="close">✕</button></span>
 </div>
+<div class="prof" id="prof" hidden></div>
 <div class="settings" id="settings" hidden>
   <label class="dk"><span data-i="opacity"></span><input type="range" id="opacity" min="40" max="100" step="5"><span id="opv"></span></label>
   <div class="row"><button class="tbtn" id="lang"></button><button class="pin on" id="pin" data-i="pin"></button><button class="tbtn" id="sound"></button></div>
@@ -625,6 +626,23 @@ es.onerror = () => { connected = false; render(); };
   .dlog { display:flex; flex-direction:column; font-size:12px; }
   .dlog div { display:grid; grid-template-columns:auto 1fr auto; gap:8px; padding:4px 0; border-top:1px solid var(--line); } .dlog div:first-child { border-top:0; }
   .dlog b { font-weight:600; font-variant-numeric:tabular-nums; } .dlog small { color:var(--muted); } .dlog .bad span { color:var(--bad); }
+  .prof { flex:none; border-bottom:1px solid var(--line); background:linear-gradient(90deg, #2e1f2f88, transparent); }
+  .prof .top { display:flex; align-items:center; gap:9px; padding:7px 10px; cursor:pointer; }
+  .prof .av { width:34px; height:34px; border-radius:8px; flex:none; background:var(--panel2); object-fit:cover; }
+  .prof .who { min-width:0; flex:1; } .prof .who b { display:block; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .prof .id { font-size:10.5px; color:var(--muted); background:none; border:0; padding:0; font-variant-numeric:tabular-nums; } .prof .id:hover { color:var(--text); }
+  .medal { position:relative; width:38px; height:38px; flex:none; } .medal img { position:absolute; inset:0; width:100%; height:100%; }
+  .medal small { position:absolute; bottom:-1px; left:0; right:0; text-align:center; font-size:9px; font-weight:800; text-shadow:0 0 3px #000; }
+  .wr { text-align:center; flex:none; } .wr b { display:block; font-size:15px; line-height:1.1; font-variant-numeric:tabular-nums; } .wr small { font-size:10px; color:var(--muted); white-space:nowrap; }
+  .wr .up { color:var(--good); } .wr .down { color:var(--bad); }
+  .mmr { text-align:right; flex:none; } .mmr b { font-size:17px; font-variant-numeric:tabular-nums; display:block; line-height:1.1; }
+  .mmr small { font-size:10.5px; color:var(--muted); white-space:nowrap; } .mmr .up { color:var(--good); } .mmr .down { color:var(--bad); }
+  .prof .more { padding:0 10px 10px; display:flex; flex-direction:column; gap:8px; }
+  .prof svg { width:100%; height:70px; display:block; background:var(--panel); border-radius:8px; }
+  .prof .set { display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:11.5px; color:var(--muted); }
+  .prof .set input { width:70px; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:4px 6px; font:inherit; }
+  .prof .set input.sm { width:44px; }
+  body.compact .prof .more, body.compact .prof .who, body.compact .prof .wr small, body.compact .prof .mmr small { display:none !important; } body.compact .prof .top { padding:4px 6px; gap:6px; }
   #gadv { width:100%; height:60px; display:block; }
 </style>
 <script>
@@ -695,6 +713,12 @@ R.en.data = { title: "Hero stats data", now: "Update now", running: n => `Updati
   auto: "auto", manual: "manual", added: n => `+${n.toLocaleString()} matches`, removed: n => `${n.toLocaleString()} old removed`, fail: e => `failed: ${e}`,
   gap: "more new matches than one update fetches; took the newest", limit: "hit today's OpenDota limit",
   how: "Every day the app pulls the newest Legend+ ranked matches from OpenDota and drops matches older than 30 days. Hero suggestions use the new data right after an update (during a draft or game it waits until it ends).", none: "No updates yet" };
+R.th.prof = { wr: "30 วัน", wrT: (w, l, p) => `แรงค์ 30 วันล่าสุด: ชนะ ${w} แพ้ ${l} (${p}%)`, wrAllT: (w, l, p) => `ทุกโหมด: ชนะ ${w} แพ้ ${l} (${p}%)`, copy: "คัดลอก ID แล้ว", est: "ประมาณจาก OpenDota", yours: "นับจาก MMR ที่คุณใส่", today: (w, l) => `วันนี้ ${w}W-${l}L`, streak: n => n > 0 ? `ชนะติด ${n}` : `แพ้ติด ${-n}`,
+  chart: n => `MMR ${n} เกมแรงค์ล่าสุด`, setT: "MMR จริงของคุณตอนนี้", per: "ต่อเกม", save: "บันทึก", reset: "ใช้ค่าประมาณ",
+  how: "Valve ไม่เปิดเผย MMR ให้แอปอื่นดู ใส่ MMR จากโปรไฟล์ใน Dota หนึ่งครั้ง แล้วแอปจะบวก/ลบทุกเกมแรงค์ให้เอง (ค่าจริงในเกมอาจต่างไปเล็กน้อย ใส่ใหม่ได้ตลอด)", noRank: "ไม่มีแรงค์" };
+R.en.prof = { wr: "30 days", wrT: (w, l, p) => `Ranked, last 30 days: ${w} won, ${l} lost (${p}%)`, wrAllT: (w, l, p) => `All modes: ${w} won, ${l} lost (${p}%)`, copy: "ID copied", est: "OpenDota estimate", yours: "counted from your MMR", today: (w, l) => `Today ${w}W-${l}L`, streak: n => n > 0 ? `${n} win streak` : `${-n} loss streak`,
+  chart: n => `MMR over the last ${n} ranked games`, setT: "Your real MMR now", per: "per game", save: "Save", reset: "Use estimate",
+  how: "Valve doesn't share MMR with other apps. Enter the MMR from your Dota profile once and the app adds/removes it for every ranked game (the real number can drift a little; re-enter it any time).", noRank: "Unranked" };
 const mm = s => (s < 0 ? "-" : "") + Math.floor(Math.abs(s) / 60) + ":" + String(Math.abs(Math.round(s)) % 60).padStart(2, "0");
 const RANKS = ["", "Herald", "Guardian", "Crusader", "Archon", "Legend", "Ancient", "Divine", "Immortal"];
 const rankName = r => r ? RANKS[Math.floor(r / 10)] + (r % 10 && r < 80 ? " " + (r % 10) : "") : "–";
@@ -714,6 +738,7 @@ document.getElementById("nav").addEventListener("click", e => { const b = e.targ
 // called by render() with the server's account/report state
 function onMeState(s) {
   meState = s || {};
+  if (meState.accountId && (meState.accountId !== profAcc || meState.profileRev !== profRev)) { profAcc = meState.accountId; profRev = meState.profileRev; loadProfile(); }
   const l = meState.latest;
   if (l && l.matchId !== lastLatest) {
     const first = lastLatest === null;
@@ -725,6 +750,56 @@ function onMeState(s) {
   if (view === "report" && job && reportData && !reportData.loading && reportData.status !== job && job !== "waiting") loadReport();
   renderExtra();
 }
+
+// ---------- profile bar ----------
+let prof = null, profRev = -1, profAcc = null, profOpen = false;
+function loadProfile() { api("profile").then(p => { prof = p; renderProfile(); }).catch(() => {}); }
+setInterval(() => { if (meState.accountId) loadProfile(); }, 5 * 60e3);
+function renderProfile() {
+  const el = document.getElementById("prof"), p = prof, r = R[lang].prof;
+  el.hidden = !p;
+  if (!p) return;
+  const tier = p.rankTier || 0, medal = Math.floor(tier / 10), stars = tier % 10;
+  const rankTxt = tier ? rankName(tier) + (p.leaderboard ? " #" + p.leaderboard : "") : r.noRank;
+  const s = p.series || [], first = s.length ? s[0].mmr : 0;
+  const delta = p.today.delta;
+  const pct = x => x && x.w + x.l ? Math.round(x.w / (x.w + x.l) * 100) : null;
+  const wr = p.wr30 && p.wr30.w + p.wr30.l ? p.wr30 : p.wrAll30, wrp = pct(wr);
+  let h = `<div class="top" id="ptop"><img class="av" src="${esc(p.avatar || "")}" alt="" onerror="this.style.visibility='hidden'">
+    <div class="who"><b>${esc(p.name || "?")}</b><button class="id" id="pid" title="Friend ID">ID ${p.accountId} ⧉</button></div>
+    ${wrp == null ? "" : `<div class="wr" title="${esc(p.wr30 && wr === p.wr30 ? r.wrT(wr.w, wr.l, wrp) : r.wrAllT(wr.w, wr.l, wrp))}"><b class="${wrp >= 50 ? "up" : "down"}">${wrp}%</b><small>${esc(r.wr)} · ${wr.w}-${wr.l}</small></div>`}
+    <div class="medal" title="${esc(rankTxt)}"><img src="/ranks/rank_icon_${medal}.png" alt="">${stars && medal < 8 ? `<img src="/ranks/rank_star_${stars}.png" alt="">` : ""}${p.leaderboard ? `<small>${p.leaderboard}</small>` : ""}</div>
+    <div class="mmr"><b title="${esc(p.source === "you" ? r.yours : r.est)}">${p.mmr == null ? "–" : (p.source === "opendota" ? "≈" : "") + p.mmr.toLocaleString()}</b>
+      <small>${esc(r.today(p.today.w, p.today.l))} <span class="${delta >= 0 ? "up" : "down"}">${delta >= 0 ? "+" : ""}${delta}</span>${p.streak && Math.abs(p.streak) >= 2 ? " · " + esc(r.streak(p.streak)) : ""}</small></div></div>`;
+  if (profOpen) {
+    let svg = "";
+    if (s.length > 1) {
+      const vals = s.map(x => x.mmr), lo = Math.min(...vals) - 10, hi = Math.max(...vals) + 10, W = 300, H = 70;
+      const X = i => (6 + i / (s.length - 1) * (W - 12)).toFixed(1), Y = v => (H - 8 - (v - lo) / (hi - lo) * (H - 20)).toFixed(1);
+      svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline fill="none" stroke="#d5645f" stroke-width="1.6" vector-effect="non-scaling-stroke" points="${s.map((x, i) => X(i) + "," + Y(x.mmr)).join(" ")}"/>
+        ${s.map((x, i) => `<circle cx="${X(i)}" cy="${Y(x.mmr)}" r="2.2" fill="${x.won ? "#58c26a" : "#e0563f"}"><title>${x.mmr} · ${x.won ? R[lang].win : R[lang].loss} · ${new Date(x.t * 1000).toLocaleDateString()}</title></circle>`).join("")}
+        <text x="4" y="11" fill="#a98c98" font-size="9">${hi - 10}</text><text x="4" y="${H - 2}" fill="#a98c98" font-size="9">${lo + 10}</text></svg>`;
+    }
+    const lines = [p.wr30 && pct(p.wr30) != null ? r.wrT(p.wr30.w, p.wr30.l, pct(p.wr30)) : "", p.wrAll30 && pct(p.wrAll30) != null ? r.wrAllT(p.wrAll30.w, p.wrAll30.l, pct(p.wrAll30)) : ""].filter(Boolean);
+    h += `<div class="more">${lines.length ? `<div class="meta">${lines.map(esc).join("<br>")}</div>` : ""}<div class="label">${esc(r.chart(s.length))} · ${esc(p.source === "you" ? r.yours : r.est)}</div>${svg}
+      <div class="set"><span>${esc(r.setT)}</span><input id="pmmr" type="number" min="0" max="15000" placeholder="${p.mmr || ""}"><span>±</span><input class="sm" id="pper" type="number" min="1" max="60" value="${p.perGame}"><span>${esc(r.per)}</span>
+        <button class="tbtn" id="psave">${esc(r.save)}</button>${p.source === "you" ? `<button class="tbtn" id="preset">${esc(r.reset)}</button>` : ""}</div>
+      <div class="note">${esc(r.how)}</div></div>`;
+  }
+  if (el.dataset.h !== h) { el.dataset.h = h; el.innerHTML = h; }
+}
+document.getElementById("prof").addEventListener("click", e => {
+  const t = e.target;
+  if (t.closest("#pid")) { const id = String(prof.accountId); if (window.desktop) window.desktop.copy(id); else navigator.clipboard && navigator.clipboard.writeText(id).catch(() => {}); t.closest("#pid").textContent = R[lang].prof.copy + " ✓"; setTimeout(() => { delete document.getElementById("prof").dataset.h; renderProfile(); }, 1200); return; }
+  if (t.closest("#psave") || t.closest("#preset")) {
+    const v = document.getElementById("pmmr").value, per = document.getElementById("pper").value;
+    const body = t.closest("#preset") ? { mmr: null, perGame: +per } : { mmr: v === "" ? undefined : +v, perGame: +per };
+    fetch("/mmr", { method: "POST", body: JSON.stringify(body) }).catch(() => {});
+    return;
+  }
+  if (t.closest("input")) return;
+  if (t.closest("#ptop")) { profOpen = !profOpen; renderProfile(); }
+});
 
 async function loadReport() {
   if (!meState.accountId) return renderExtra();
@@ -867,7 +942,7 @@ document.querySelector("main").addEventListener("input", e => {
   playerQuery = e.target.value; const pos = e.target.selectionStart; renderExtra();
   const el = document.getElementById("psearch"); if (el !== e.target) { el.focus(); el.setSelectionRange(pos, pos); }
 });
-document.getElementById("lang").addEventListener("click", () => renderExtra());
+document.getElementById("lang").addEventListener("click", () => { renderExtra(); renderProfile(); });
 renderExtra();
 </script>
 

@@ -148,6 +148,7 @@ const server = http.createServer((req, res) => {
       res.end("ok");
       try {
         const data = JSON.parse(body);
+        if (req.url === "/mmr") { insights.setMmr(data); return; }
         if (req.url === "/manual") {   // from the app's own page
           for (const k of ["rosh", "torm"]) if (k in data) manual[k] = typeof data[k] === "number" ? data[k] : null;
           return broadcast();
@@ -181,7 +182,7 @@ const server = http.createServer((req, res) => {
     req.on("close", () => clients.delete(res));
     return;
   }
-  if (req.url.startsWith("/heroes/") || req.url.startsWith("/items/")) {
+  if (req.url.startsWith("/heroes/") || req.url.startsWith("/items/") || req.url.startsWith("/ranks/")) {
     const f = path.join(__dirname, "assets", req.url.split("/")[1], path.basename(req.url));
     if (fs.existsSync(f)) {
       res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "max-age=86400" });
@@ -201,6 +202,7 @@ async function api(req, res) {
     if (parts[1] === "matches") return send(200, await insights.myMatches());
     if (parts[1] === "report" && /^\d+$/.test(parts[2] || "")) return send(200, await insights.report(parts[2]));
     if (parts[1] === "update" && req.method === "POST") { updater.run("manual"); return send(200, { ok: true }); }
+    if (parts[1] === "profile") return send(200, await insights.profile());
     if (parts[1] === "players") return send(200, insights.metList());
     if (parts[1] === "player" && /^\d+$/.test(parts[2] || "")) return send(200, await insights.player(parts[2]));
     send(404, { error: "not found" });
